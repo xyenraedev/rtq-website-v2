@@ -9,22 +9,26 @@ import {
   IconCheck,
   IconLoader2,
   IconTag,
-  IconDimensions,
+  IconPhoto,
   IconAlertCircle,
-  IconLock,
 } from '@tabler/icons-react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+
 import { insertGaleri, type GaleriWithKategori } from '@/lib/galeri'
-import { ImageUploader } from '@/components/image-uploader'
+
+import { MultiImageUploader } from '@/components/multi-image-uploader'
 
 function FieldLabel({
   children,
   required,
   ...props
-}: React.LabelHTMLAttributes<HTMLLabelElement> & { required?: boolean }) {
+}: React.LabelHTMLAttributes<HTMLLabelElement> & {
+  required?: boolean
+}) {
   return (
     <label {...props} className={cn('text-xs font-semibold text-foreground', props.className)}>
       {children}
+
       {required && <span className="text-destructive ml-0.5">*</span>}
     </label>
   )
@@ -49,28 +53,6 @@ const inputBase = cn(
 
 const textareaBase = cn(inputBase, 'min-h-[80px] max-h-[120px] resize-y leading-relaxed')
 
-function getImageDimensions(file: File): Promise<{
-  width: number
-  height: number
-}> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image()
-
-    img.onload = () => {
-      resolve({
-        width: img.width,
-        height: img.height,
-      })
-
-      URL.revokeObjectURL(img.src)
-    }
-
-    img.onerror = reject
-
-    img.src = URL.createObjectURL(file)
-  })
-}
-
 interface GaleriKategoriOption {
   id: string
   nama: string
@@ -84,32 +66,25 @@ export interface ModalTambahGaleriProps {
 }
 
 export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTambahGaleriProps) {
-  const [imageUrl, setImageUrl] = useState('')
-  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
 
   const [judul, setJudul] = useState('')
   const [deskripsi, setDeskripsi] = useState('')
   const [kategoriId, setKategoriId] = useState('')
 
-  const [width, setWidth] = useState('')
-  const [height, setHeight] = useState('')
-
   const [saving, setSaving] = useState(false)
+
   const [error, setError] = useState<Record<string, string>>({})
 
   const [createdAt, setCreatedAt] = useState(new Date().toISOString().slice(0, 16))
 
   useEffect(() => {
     if (open) {
-      setImageUrl('')
-      setImageFile(null)
+      setFiles([])
 
       setJudul('')
       setDeskripsi('')
       setKategoriId('')
-
-      setWidth('')
-      setHeight('')
 
       setCreatedAt(new Date().toISOString().slice(0, 16))
 
@@ -118,13 +93,13 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
     }
   }, [open])
 
-  const validate = () => {
+  // ─── Validation ───────────────────────────────────────────────────────────
+
+  function validate() {
     const newErr: Record<string, string> = {}
 
-    if (!imageFile && !imageUrl.trim()) {
-      newErr.imageUrl = 'Pilih file atau masukkan URL gambar'
-    } else if (!imageFile && !/^https?:\/\/.+/.test(imageUrl.trim())) {
-      newErr.imageUrl = 'URL gambar tidak valid'
+    if (files.length === 0) {
+      newErr.images = 'Minimal pilih 1 gambar'
     }
 
     if (!judul.trim()) {
@@ -146,7 +121,9 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
     return newErr
   }
 
-  const handleSave = async () => {
+  // ─── Save ─────────────────────────────────────────────────────────────────
+
+  async function handleSave() {
     const errs = validate()
 
     if (Object.keys(errs).length > 0) {
@@ -160,21 +137,18 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
     try {
       const result = await insertGaleri(
         {
-          image_url: imageUrl.trim(),
           judul: judul.trim(),
           deskripsi: deskripsi.trim(),
           galeri_kategori_id: kategoriId,
-          width: width ? Number(width) : null,
-          height: height ? Number(height) : null,
           created_at: new Date(createdAt).toISOString(),
         },
-        imageFile ?? undefined
+        files
       )
 
       onSave(result)
 
-      toast.success('Foto berhasil ditambahkan', {
-        description: `"${result.judul}" telah ditambahkan.`,
+      toast.success('Album galeri berhasil ditambahkan', {
+        description: `${files.length} gambar berhasil diupload.`,
         duration: 3000,
       })
 
@@ -182,9 +156,11 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Terjadi kesalahan pada server.'
 
-      setError({ imageUrl: msg })
+      setError({
+        images: msg,
+      })
 
-      toast.error('Gagal menambahkan foto', {
+      toast.error('Gagal menambahkan album galeri', {
         description: msg,
         duration: 5000,
       })
@@ -195,37 +171,36 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
 
   const selectedKategori = kategoris.find((k) => k.id === kategoriId)
 
-  const hasImage = !!imageFile || (!!imageUrl.trim() && /^https?:\/\/.+/.test(imageUrl.trim()))
+  // ─── UI ───────────────────────────────────────────────────────────────────
 
   return (
     <DialogPrimitive.Root
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen && open) onClose()
+        if (!isOpen && open) {
+          onClose()
+        }
       }}
     >
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-200" />
+        <DialogPrimitive.Overlay
+          className={cn(
+            'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm',
+            'data-[state=open]:animate-in',
+            'data-[state=closed]:animate-out'
+          )}
+        />
 
         <DialogPrimitive.Content
           onInteractOutside={(e) => {
             e.preventDefault()
-            onClose()
-          }}
-          onEscapeKeyDown={(e) => {
-            e.preventDefault()
-            onClose()
           }}
           className={cn(
-            'fixed left-[50%] top-[50%] z-50 translate-x-[-50%] translate-y-[-50%]',
-            'w-full max-w-lg flex flex-col max-h-[90vh]',
+            'fixed left-[50%] top-[50%] z-50',
+            'translate-x-[-50%] translate-y-[-50%]',
+            'w-full max-w-2xl max-h-[90vh]',
             'bg-card border border-border rounded-2xl shadow-2xl',
-            'data-[state=open]:animate-in data-[state=closed]:animate-out',
-            'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-            'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-            'data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]',
-            'data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]',
-            'duration-200'
+            'flex flex-col overflow-hidden'
           )}
         >
           {/* HEADER */}
@@ -237,15 +212,16 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
 
               <div>
                 <DialogPrimitive.Title className="text-base font-bold text-foreground">
-                  Tambah Foto Galeri
+                  Tambah Album Galeri
                 </DialogPrimitive.Title>
 
-                <p className="text-xs text-muted-foreground mt-0.5">Upload foto baru ke galeri</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Upload banyak gambar sekaligus
+                </p>
               </div>
             </div>
 
             <DialogPrimitive.Close
-              onClick={onClose}
               disabled={saving}
               className="rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors p-1.5 disabled:opacity-40"
             >
@@ -255,56 +231,41 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
 
           {/* CONTENT */}
           <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
-            {/* IMAGE */}
+            {/* UPLOADER */}
             <div>
               <FieldLabel required className="block mb-2">
-                Gambar
+                Upload Gambar
               </FieldLabel>
 
-              <ImageUploader
-                onFileChange={async (f) => {
-                  setImageFile(f)
+              <MultiImageUploader
+                files={files}
+                onChange={(newFiles) => {
+                  setFiles(newFiles)
 
-                  setError((p) => ({
-                    ...p,
-                    imageUrl: '',
-                  }))
-
-                  if (f) {
-                    try {
-                      const dimensions = await getImageDimensions(f)
-
-                      setWidth(String(dimensions.width))
-                      setHeight(String(dimensions.height))
-                    } catch {
-                      setWidth('')
-                      setHeight('')
-                    }
-                  } else {
-                    setWidth('')
-                    setHeight('')
-                  }
-                }}
-                onUrlChange={(u) => {
-                  setImageUrl(u)
-
-                  setError((p) => ({
-                    ...p,
-                    imageUrl: '',
+                  setError((prev) => ({
+                    ...prev,
+                    images: '',
                   }))
                 }}
-                urlValue={imageUrl}
-                fileValue={imageFile}
-                error={error.imageUrl}
                 disabled={saving}
+                maxFiles={20}
               />
+
+              <FieldError message={error.images} />
+
+              {files.length > 0 && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <IconPhoto size={13} />
+                  {files.length} gambar dipilih
+                </div>
+              )}
             </div>
 
             {/* JUDUL */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <FieldLabel required htmlFor="tambah-judul">
-                  Judul
+                <FieldLabel required htmlFor="judul">
+                  Judul Album
                 </FieldLabel>
 
                 <span
@@ -318,16 +279,16 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
               </div>
 
               <input
-                id="tambah-judul"
-                maxLength={100}
-                placeholder="Masukkan judul foto..."
+                id="judul"
                 value={judul}
                 disabled={saving}
+                maxLength={100}
+                placeholder="Masukkan judul album..."
                 onChange={(e) => {
                   setJudul(e.target.value)
 
-                  setError((p) => ({
-                    ...p,
+                  setError((prev) => ({
+                    ...prev,
                     judul: '',
                   }))
                 }}
@@ -343,7 +304,7 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
             {/* DESKRIPSI */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <FieldLabel required htmlFor="tambah-deskripsi">
+                <FieldLabel required htmlFor="deskripsi">
                   Deskripsi
                 </FieldLabel>
 
@@ -358,16 +319,16 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
               </div>
 
               <textarea
-                id="tambah-deskripsi"
-                maxLength={500}
-                placeholder="Masukkan deskripsi foto..."
+                id="deskripsi"
                 value={deskripsi}
                 disabled={saving}
+                maxLength={500}
+                placeholder="Masukkan deskripsi album..."
                 onChange={(e) => {
                   setDeskripsi(e.target.value)
 
-                  setError((p) => ({
-                    ...p,
+                  setError((prev) => ({
+                    ...prev,
                     deskripsi: '',
                   }))
                 }}
@@ -395,7 +356,7 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
 
             {/* KATEGORI */}
             <div>
-              <FieldLabel required htmlFor="tambah-kategori" className="flex mb-1.5">
+              <FieldLabel required htmlFor="kategori" className="flex mb-1.5">
                 <span className="flex items-center gap-1.5">
                   <IconTag size={12} />
                   Kategori
@@ -403,14 +364,14 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
               </FieldLabel>
 
               <select
-                id="tambah-kategori"
+                id="kategori"
                 value={kategoriId}
                 disabled={saving}
                 onChange={(e) => {
                   setKategoriId(e.target.value)
 
-                  setError((p) => ({
-                    ...p,
+                  setError((prev) => ({
+                    ...prev,
                     kategoriId: '',
                   }))
                 }}
@@ -433,57 +394,13 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
 
               {selectedKategori && (
                 <div className="mt-2">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-secondary/50 border-border text-foreground dark:bg-white/5 dark:border-white/10">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-secondary/50 border-border text-foreground">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary" />
 
                     <span>{selectedKategori.nama}</span>
                   </span>
                 </div>
               )}
-            </div>
-
-            {/* DIMENSI */}
-            <div>
-              <FieldLabel className="block mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <IconDimensions size={12} />
-                  Dimensi Gambar
-                </span>
-              </FieldLabel>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={width ? `${width}px` : '-'}
-                    disabled
-                    className={cn(inputBase, 'pr-10 bg-muted/40')}
-                  />
-
-                  <IconLock
-                    size={14}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  />
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={height ? `${height}px` : '-'}
-                    disabled
-                    className={cn(inputBase, 'pr-10 bg-muted/40')}
-                  />
-
-                  <IconLock
-                    size={14}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                  />
-                </div>
-              </div>
-
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Dimensi otomatis terdeteksi dari gambar dan tidak dapat diubah.
-              </p>
             </div>
           </div>
 
@@ -501,7 +418,9 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || !hasImage || !judul.trim() || !deskripsi.trim() || !kategoriId}
+              disabled={
+                saving || files.length === 0 || !judul.trim() || !deskripsi.trim() || !kategoriId
+              }
               className="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
             >
               {saving ? (
@@ -512,7 +431,7 @@ export function ModalTambahGaleri({ open, onClose, onSave, kategoris }: ModalTam
               ) : (
                 <>
                   <IconCheck size={15} />
-                  Simpan Foto
+                  Simpan Album
                 </>
               )}
             </button>
