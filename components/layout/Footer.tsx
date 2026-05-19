@@ -117,7 +117,7 @@ export default function Footer() {
   return (
     <footer className="pt-16 pb-8 border-t border-gray-100 bg-white">
       <div className="container mx-auto px-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-12 lg:gap-16">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 lg:gap-16">
           {/* Kolom 1: Logo & Deskripsi */}
           <div className="flex flex-col items-start space-y-6">
             <Link href="/" className="group flex items-center gap-3">
@@ -162,7 +162,7 @@ export default function Footer() {
           </div>
 
           {/* Kolom 2: Navigasi Cepat */}
-          <div className="flex flex-col sm:items-center">
+          <div className="flex flex-col lg:items-center">
             <h3 className="text-xl font-bold mb-6 text-gray-800">Navigasi Cepat</h3>
             <div className="grid grid-cols-2 gap-x-8 gap-y-1 w-full max-w-xs text-sm md:text-base">
               <div className="space-y-0.5">
@@ -179,18 +179,18 @@ export default function Footer() {
           </div>
 
           {/* Kolom 3: Kontak */}
-          <div className="flex flex-col sm:items-end">
+          <div className="flex flex-col lg:items-end">
             <h3 className="text-xl font-bold mb-6 text-gray-800">Kontak Kami</h3>
-            <div className="space-y-4 text-gray-600 text-sm md:text-base sm:text-right">
-              <div className="flex items-start gap-3 sm:justify-end">
+            <div className="space-y-4 text-gray-600 text-sm md:text-base lg:text-right">
+              <div className="flex items-start gap-3 lg:justify-end">
                 <IconMapPin size={20} className="text-green-500 shrink-0 mt-0.5" />
                 <span>{settings.alamat || 'Alamat belum diatur'}</span>
               </div>
-              <div className="flex items-center gap-3 sm:justify-end">
+              <div className="flex items-center gap-3 lg:justify-end">
                 <IconPhone size={20} className="text-green-500 shrink-0" />
                 <span>{settings.no_whatsapp || 'Nomor belum diatur'}</span>
               </div>
-              <div className="flex items-center gap-3 sm:justify-end">
+              <div className="flex items-center gap-3 lg:justify-end">
                 <IconMail size={20} className="text-green-500 shrink-0" />
                 <span className="break-all">{settings.email || 'Email belum diatur'}</span>
               </div>
