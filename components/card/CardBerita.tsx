@@ -6,6 +6,7 @@ import { IconEye, IconClock, IconCalendarEvent } from '@tabler/icons-react'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface BeritaItem {
+  slug: any
   id: string
   gambar: string
   judul: string
@@ -54,7 +55,7 @@ const CardBerita: React.FC<CardBeritaProps> = ({ item, loading }) => {
 
   return (
     <article className="group bg-card rounded-xl border border-border/50 overflow-hidden hover:border-border hover:shadow-md transition-all duration-300 h-full">
-      <Link href={`/berita/${item.id}`} className="flex flex-row md:flex-col h-full">
+      <Link href={`/berita/${item.slug}`} className="flex flex-row md:flex-col h-full">
         <div className="relative shrink-0 w-28 self-stretch md:w-full md:h-48 overflow-hidden">
           <Image
             src={item.gambar}
@@ -71,7 +72,7 @@ const CardBerita: React.FC<CardBeritaProps> = ({ item, loading }) => {
 
         <div className="flex flex-col flex-1 p-3 md:p-4 min-w-0 gap-1.5">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full truncate max-w-[120px]">
+            <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full truncate max-w-30">
               {item.kategori.nama}
             </span>
             <span className="md:hidden flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">

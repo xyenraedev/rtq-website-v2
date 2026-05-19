@@ -3,14 +3,14 @@
 import { motion } from 'motion/react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { IconEye, IconClock, IconCalendarEvent } from '@tabler/icons-react'
+import { IconClock, IconCalendarEvent } from '@tabler/icons-react'
 
 type RelatedNewsCardProps = {
   item: {
     id: string
+    slug: string
     gambar?: string
     judul: string
-    views: number
     kategori_id?: string
     kategori?: { nama: string }
     konten: string
@@ -43,49 +43,69 @@ const CardRelatedBerita: React.FC<RelatedNewsCardProps> = ({ item }) => {
   return (
     <motion.article
       variants={fadeInUp}
-      className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all"
+      className="
+    flex h-full flex-col overflow-hidden
+    transition-all duration-300
+    hover:-translate-y-1 hover:shadow-xl
+  "
     >
-      <Link href={`/berita/${item.id}`}>
-        <div className="relative h-48 overflow-hidden">
+      <Link href={`/berita/${item.slug}`} className="flex h-full flex-col">
+        {/* IMAGE */}
+        <div className="relative aspect-video w-full min-w-full shrink-0 overflow-hidden rounded">
           {item.gambar ? (
             <Image
               src={item.gambar}
               alt={item.judul}
               fill
-              className="object-cover transform hover:scale-105 transition-transform duration-300"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              className="object-cover transition-transform duration-500 hover:scale-105"
             />
           ) : (
-            <div className="flex items-center justify-center w-full h-full bg-gray-200">
-              <span className="text-gray-500">No Image</span>
+            <div className="absolute inset-0 flex items-center justify-center bg-muted">
+              <span className="text-sm text-muted-foreground">No Image</span>
             </div>
           )}
-
-          <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm flex items-center gap-2">
-            <IconEye size={18} className="text-gray-600" />
-            <span className="text-gray-700">{item.views}</span>
-          </div>
+          {/* OVERLAY */}
+          <div className="absolute inset-0 bg-linear-to-t from-black/60 via-black/10 to-transparent pointer-events-none" />
+          {/* KATEGORI */}
+          {item.kategori?.nama && (
+            <div className="absolute left-3 top-3 z-10">
+              <span
+                className="
+          rounded-full bg-white/90 px-3 py-1
+          text-[11px] font-medium text-primary
+          backdrop-blur-sm
+        "
+              >
+                {item.kategori.nama}
+              </span>
+            </div>
+          )}
         </div>
+        {/* CONTENT */}
+        <div className="flex flex-1 flex-col space-y-3 mt-4">
+          {/* META */}
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <IconCalendarEvent size={15} />
+              <span>{formatTanggal(item.created_at)}</span>
+            </div>
 
-        <div className="p-6">
-          <div className="flex items-center gap-4 mb-3">
-            <span className="text-sm text-green-600 bg-green-50 px-3 py-1 rounded-full line-clamp-2">
-              {item.kategori?.nama}
-            </span>
-
-            <div className="flex items-center text-gray-500 text-sm gap-1">
-              <IconClock size={16} />
-              {item.waktu_baca ?? 0} min
+            <div className="flex items-center gap-1.5">
+              <IconClock size={15} />
+              <span>{item.waktu_baca ?? 0} min</span>
             </div>
           </div>
-
-          <h3 className="text-xl font-semibold text-gray-900 mb-3 line-clamp-2">{item.judul}</h3>
-
-          {item.ringkasan && <p className="text-gray-600 mb-4 line-clamp-2">{item.ringkasan}</p>}
-
-          <div className="flex items-center text-sm text-gray-500 gap-2">
-            <IconCalendarEvent size={16} />
-            {formatTanggal(item.created_at)}
-          </div>
+          {/* TITLE */}
+          <h3
+            className="
+              line-clamp-2
+              text-md font-medium leading-snug text-foreground
+              transition-colors hover:text-primary
+            "
+          >
+            {item.judul}
+          </h3>
         </div>
       </Link>
     </motion.article>

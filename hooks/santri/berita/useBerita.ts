@@ -9,6 +9,7 @@ interface Kategori {
 }
 
 interface Berita {
+  slug: any
   id: string
   judul: string
   konten: string

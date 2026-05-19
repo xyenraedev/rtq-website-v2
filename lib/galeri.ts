@@ -45,6 +45,18 @@ export interface UpdateGaleriInput {
   created_at?: string | null
 }
 
+export interface FetchGaleriOptions {
+  page?: number
+  pageSize?: number
+  kategoriId?: string | null
+}
+
+export interface FetchGaleriResult {
+  data: GaleriWithKategori[]
+  hasMore: boolean
+  total: number
+}
+
 const BUCKET = 'galeri_images'
 
 // ─── Client ───────────────────────────────────────────────────────────────────
@@ -171,7 +183,43 @@ export async function deleteStorageImages(images: GaleriImage[]): Promise<void> 
   await supabase.storage.from(BUCKET).remove(paths)
 }
 
-// ─── Fetch ────────────────────────────────────────────────────────────────────
+// ─── Fetch (Paginated) ────────────────────────────────────────────────────────
+
+export const GALERI_PAGE_SIZE = 12
+
+export async function fetchGaleriPaginated({
+  page = 1,
+  pageSize = GALERI_PAGE_SIZE,
+  kategoriId = null,
+}: FetchGaleriOptions = {}): Promise<FetchGaleriResult> {
+  const supabase = getClient()
+
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  let query = supabase
+    .from('galeri')
+    .select(SELECT_FIELDS, { count: 'exact' })
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (kategoriId) {
+    query = query.eq('galeri_kategori_id', kategoriId)
+  }
+
+  const { data, error, count } = await query
+
+  if (error) throw error
+
+  const total = count ?? 0
+  const items = transformRelasi((data ?? []) as RawGaleri[])
+
+  return {
+    data: items,
+    hasMore: from + items.length < total,
+    total,
+  }
+}
 
 export async function fetchGaleri(): Promise<GaleriWithKategori[]> {
   const supabase = getClient()

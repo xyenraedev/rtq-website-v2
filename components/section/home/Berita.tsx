@@ -55,7 +55,7 @@ export default function Berita() {
             viewport={{ once: true, margin: '-50px' }}
             transition={{ duration: 0.4, delay: index * 0.08 }}
           >
-            <Link href={`/berita/${item.id}`} className="group block h-full">
+            <Link href={`/berita/${item.slug}`} className="group block h-full">
               <Card className="h-full flex flex-col overflow-hidden border border-border bg-card transition-all duration-300 hover:shadow-lg hover:border-primary/40 gap-0 py-0">
                 {/* Image */}
                 <div className="relative w-full h-40 sm:h-44 overflow-hidden">
@@ -66,7 +66,7 @@ export default function Berita() {
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-black/10 to-transparent" />
+                  <div className="absolute inset-0 bg-linear-to-t from-black/30 via-black/10 to-transparent" />
                 </div>
 
                 {/* Content */}

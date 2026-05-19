@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 
 import {
@@ -23,15 +23,35 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui
 
 import SkeletonGaleri from '@/components/skeleton/galeri/SkeletonGaleri'
 
-import { fetchGaleri, type GaleriImage, type GaleriWithKategori } from '@/lib/galeri'
-
+import { type GaleriImage, type GaleriWithKategori } from '@/lib/galeri'
 import { fetchGaleriKategori, type GaleriKategori } from '@/lib/galeri-kategori'
+import { useInfiniteGaleri } from '@/hooks/santri/galeri/useInfiniteGaleri'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface SelectedImage {
+  galeriId: string
+  image: GaleriImage
+  judul: string | null
+  deskripsi: string | null
+  created_at: string | null
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function LoadMoreSpinner() {
   return (
-    <div className="flex items-center justify-center gap-3 py-4">
+    <div className="flex items-center justify-center gap-3 py-8">
       <span className="h-4 w-4 animate-spin rounded-full border-2 border-muted border-t-foreground/60" />
       <span className="text-xs text-muted-foreground">Memuat lebih banyak…</span>
+    </div>
+  )
+}
+
+function EndOfFeedIndicator() {
+  return (
+    <div className="flex items-center justify-center gap-3 py-8">
+      <span className="text-xs text-muted-foreground">Semua foto telah ditampilkan</span>
     </div>
   )
 }
@@ -50,7 +70,6 @@ function GalleryCard({
   const [error, setError] = useState(false)
 
   const ratio = image.width && image.height ? image.width / image.height : 4 / 3
-
   const tall = ratio < 0.85
 
   if (error) return null
@@ -92,73 +111,145 @@ function GalleryCard({
   )
 }
 
-interface SelectedImage {
-  galeriId: string
-  image: GaleriImage
-  judul: string | null
-  deskripsi: string | null
-  created_at: string | null
+function LightboxImage({
+  src,
+  alt,
+  currentIndex,
+  total,
+  onNext,
+  onPrev,
+}: {
+  src: string
+  alt: string
+  currentIndex: number
+  total: number
+  onNext: () => void
+  onPrev: () => void
+}) {
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    setError(false)
+  }, [src])
+
+  return (
+    <div className="relative overflow-hidden bg-black">
+      <div className="relative aspect-4/3 w-full sm:aspect-video md:aspect-16/8">
+        {error ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-white/40">
+            <IconPhoto size={36} strokeWidth={1.2} />
+            <p className="text-xs">Gambar tidak tersedia</p>
+          </div>
+        ) : (
+          <Image
+            fill
+            priority
+            quality={85}
+            src={src}
+            alt={alt}
+            sizes="(max-width:768px) 95vw, 80vw"
+            className="object-contain"
+            onError={() => setError(true)}
+          />
+        )}
+      </div>
+
+      <DialogClose asChild>
+        <button className="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white transition-colors hover:bg-black/70">
+          <IconX size={15} />
+        </button>
+      </DialogClose>
+
+      {currentIndex > 0 && (
+        <button
+          onClick={onPrev}
+          className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white transition-colors hover:bg-black/65"
+        >
+          <IconChevronLeft size={18} />
+        </button>
+      )}
+
+      {currentIndex < total - 1 && (
+        <button
+          onClick={onNext}
+          className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white transition-colors hover:bg-black/65"
+        >
+          <IconChevronRight size={18} />
+        </button>
+      )}
+
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-0.5 text-[10px] text-white/70 md:text-xs">
+        {currentIndex + 1} / {total}
+      </div>
+    </div>
+  )
 }
 
-export default function GaleriPage() {
-  const [galeri, setGaleri] = useState<GaleriWithKategori[]>([])
-  const [kategori, setKategori] = useState<GaleriKategori[]>([])
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
-  const [loading, setLoading] = useState(true)
+export default function GaleriPage() {
+  const [kategori, setKategori] = useState<GaleriKategori[]>([])
+  const [kategoriLoading, setKategoriLoading] = useState(true)
 
   const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null)
-
   const [activeKategoriId, setActiveKategoriId] = useState<string | null>(null)
 
   const [heroError, setHeroError] = useState(false)
 
-  const sentinelRef = useRef<HTMLDivElement>(null)
+  // ─── Infinite scroll hook ────────────────────────────────────────────────
+
+  const { galeri, loading, loadingMore, hasMore, sentinelRef, error } = useInfiniteGaleri({
+    kategoriId: activeKategoriId,
+  })
+
+  // ─── Load kategori (once) ─────────────────────────────────────────────────
 
   useEffect(() => {
-    async function loadData() {
+    async function loadKategori() {
       try {
-        setLoading(true)
-
-        const [galeriData, kategoriData] = await Promise.all([fetchGaleri(), fetchGaleriKategori()])
-
-        setGaleri(galeriData)
-        setKategori(kategoriData)
-      } catch (error) {
-        console.error(error)
-
-        toast.error('Gagal memuat galeri')
+        const data = await fetchGaleriKategori()
+        setKategori(data)
+      } catch (err) {
+        console.error(err)
+        toast.error('Gagal memuat kategori')
       } finally {
-        setLoading(false)
+        setKategoriLoading(false)
       }
     }
 
-    loadData()
+    void loadKategori()
   }, [])
 
-  const filteredGaleri = useMemo(() => {
-    if (!activeKategoriId) return galeri
+  // ─── Show error toast ─────────────────────────────────────────────────────
 
-    return galeri.filter((item) => item.galeri_kategori_id === activeKategoriId)
-  }, [galeri, activeKategoriId])
+  useEffect(() => {
+    if (error) toast.error(error)
+  }, [error])
 
-  const flattenedImages = useMemo(() => {
-    return filteredGaleri.flatMap((item) =>
-      item.images.map((image) => ({
-        galeriId: item.id,
-        image,
-        judul: item.judul,
-        deskripsi: item.deskripsi,
-        created_at: item.created_at,
-      }))
-    )
-  }, [filteredGaleri])
+  // ─── Flatten images for lightbox navigation ───────────────────────────────
 
-  const currentIndex = useMemo(() => {
-    return flattenedImages.findIndex(
-      (item) =>
-        item.galeriId === selectedImage?.galeriId && item.image.url === selectedImage?.image.url
-    )
-  }, [flattenedImages, selectedImage])
+  const flattenedImages = useMemo(
+    () =>
+      galeri.flatMap((item) =>
+        item.images.map((image) => ({
+          galeriId: item.id,
+          image,
+          judul: item.judul,
+          deskripsi: item.deskripsi,
+          created_at: item.created_at,
+        }))
+      ),
+    [galeri]
+  )
+
+  const currentIndex = useMemo(
+    () =>
+      flattenedImages.findIndex(
+        (item) =>
+          item.galeriId === selectedImage?.galeriId && item.image.url === selectedImage?.image.url
+      ),
+    [flattenedImages, selectedImage]
+  )
 
   const goNext = useCallback(() => {
     if (currentIndex < flattenedImages.length - 1) {
@@ -172,28 +263,24 @@ export default function GaleriPage() {
     }
   }, [currentIndex, flattenedImages])
 
+  // ─── Keyboard navigation ──────────────────────────────────────────────────
+
   useEffect(() => {
     if (!selectedImage) return
 
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') {
-        goNext()
-      }
-
-      if (e.key === 'ArrowLeft') {
-        goPrev()
-      }
+      if (e.key === 'ArrowRight') goNext()
+      if (e.key === 'ArrowLeft') goPrev()
     }
 
     window.addEventListener('keydown', handler)
-
-    return () => {
-      window.removeEventListener('keydown', handler)
-    }
+    return () => window.removeEventListener('keydown', handler)
   }, [selectedImage, goNext, goPrev])
 
+  // ─── Hero image ───────────────────────────────────────────────────────────
+
   const heroImage = useMemo(() => {
-    const allImages = filteredGaleri.flatMap((item) =>
+    const allImages = galeri.flatMap((item) =>
       item.images.map((image) => ({
         ...image,
         created_at: item.created_at,
@@ -202,36 +289,36 @@ export default function GaleriPage() {
 
     return (
       [...allImages]
-        .sort((a, b) => {
-          return new Date(b.created_at ?? '').getTime() - new Date(a.created_at ?? '').getTime()
-        })
+        .sort(
+          (a, b) => new Date(b.created_at ?? '').getTime() - new Date(a.created_at ?? '').getTime()
+        )
         .find((img) => {
           if (!img.width || !img.height) return false
-
           return img.width / img.height > 1.1
         }) ?? null
     )
-  }, [filteredGaleri])
+  }, [galeri])
+
+  // ─── Reset heroError when category changes ────────────────────────────────
+
+  useEffect(() => {
+    setHeroError(false)
+  }, [activeKategoriId])
+
+  // ─── Download & Share ─────────────────────────────────────────────────────
 
   const handleDownload = useCallback(async () => {
     if (!selectedImage) return
 
     try {
       const res = await fetch(selectedImage.image.url)
-
       const blob = await res.blob()
-
       const url = URL.createObjectURL(blob)
-
       const a = document.createElement('a')
-
       a.href = url
       a.download = `galeri-${selectedImage.galeriId}.jpg`
-
       a.click()
-
       URL.revokeObjectURL(url)
-
       toast.success('Foto berhasil diunduh')
     } catch {
       toast.error('Gagal mengunduh foto')
@@ -248,17 +335,29 @@ export default function GaleriPage() {
           text: selectedImage.deskripsi ?? 'Lihat dokumentasi kegiatan kami.',
           url: selectedImage.image.url,
         })
-      } catch {}
+      } catch {
+        // User cancelled share — no action needed
+      }
     } else {
       await navigator.clipboard.writeText(selectedImage.image.url)
-
       toast.success('Link berhasil disalin')
     }
   }, [selectedImage])
 
-  if (loading) {
+  // ─── Handle kategori change ───────────────────────────────────────────────
+
+  const handleKategoriChange = useCallback((id: string | null) => {
+    setActiveKategoriId(id)
+    setSelectedImage(null)
+  }, [])
+
+  // ─── Loading state ────────────────────────────────────────────────────────
+
+  if (loading && kategoriLoading) {
     return <SkeletonGaleri />
   }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -321,12 +420,13 @@ export default function GaleriPage() {
       <section id="gallery-grid" className="container mx-auto px-4 py-8 md:py-12">
         {/* FILTER */}
         <div className="mb-8">
+          {/* Mobile: horizontal scroll */}
           <div className="overflow-x-auto scrollbar-none md:hidden">
             <div className="flex w-max gap-1.5 pb-1">
               {[{ id: null, nama: 'Semua' }, ...kategori].map((cat) => (
                 <button
                   key={cat.id ?? '__all__'}
-                  onClick={() => setActiveKategoriId(cat.id)}
+                  onClick={() => handleKategoriChange(cat.id)}
                   className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                     activeKategoriId === cat.id
                       ? 'border-primary bg-primary text-primary-foreground'
@@ -339,11 +439,12 @@ export default function GaleriPage() {
             </div>
           </div>
 
+          {/* Desktop: flex wrap */}
           <div className="hidden flex-wrap gap-2 md:flex">
             {[{ id: null, nama: 'Semua' }, ...kategori].map((cat) => (
               <button
                 key={cat.id ?? '__all__'}
-                onClick={() => setActiveKategoriId(cat.id)}
+                onClick={() => handleKategoriChange(cat.id)}
                 className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-colors ${
                   activeKategoriId === cat.id
                     ? 'border-primary bg-primary text-primary-foreground'
@@ -356,16 +457,23 @@ export default function GaleriPage() {
           </div>
         </div>
 
-        {/* EMPTY */}
-        {flattenedImages.length === 0 ? (
+        {/* LOADING INITIAL */}
+        {loading ? (
+          <div className="grid auto-rows-[180px] grid-cols-2 gap-3 sm:auto-rows-[200px] sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : flattenedImages.length === 0 ? (
+          /* EMPTY */
           <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
             <IconPhoto size={36} strokeWidth={1.2} />
-
             <p className="text-sm md:text-base">Belum ada foto di kategori ini.</p>
           </div>
         ) : (
+          /* GRID */
           <div className="grid auto-rows-[180px] grid-cols-2 gap-3 sm:auto-rows-[200px] sm:grid-cols-3 lg:grid-cols-4">
-            {filteredGaleri.flatMap((item) =>
+            {galeri.flatMap((item) =>
               item.images.map((image, index) => (
                 <GalleryCard
                   key={`${item.id}-${image.url}`}
@@ -379,8 +487,12 @@ export default function GaleriPage() {
           </div>
         )}
 
-        <div ref={sentinelRef} className="mt-10 flex min-h-15 justify-center">
-          <LoadMoreSpinner />
+        {/* SENTINEL — IntersectionObserver target */}
+        <div ref={sentinelRef} className="mt-6">
+          {loadingMore && <LoadMoreSpinner />}
+          {!loading && !loadingMore && !hasMore && flattenedImages.length > 0 && (
+            <EndOfFeedIndicator />
+          )}
         </div>
       </section>
 
@@ -388,9 +500,7 @@ export default function GaleriPage() {
       <Dialog
         open={!!selectedImage}
         onOpenChange={(open) => {
-          if (!open) {
-            setSelectedImage(null)
-          }
+          if (!open) setSelectedImage(null)
         }}
       >
         <DialogContent
@@ -434,7 +544,6 @@ export default function GaleriPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <IconCalendar size={13} />
-
                     {selectedImage.created_at
                       ? new Date(selectedImage.created_at).toLocaleDateString('id-ID', {
                           day: 'numeric',
@@ -470,81 +579,6 @@ export default function GaleriPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
-  )
-}
-
-function LightboxImage({
-  src,
-  alt,
-  currentIndex,
-  total,
-  onNext,
-  onPrev,
-}: {
-  src: string
-  alt: string
-  currentIndex: number
-  total: number
-  onNext: () => void
-  onPrev: () => void
-}) {
-  const [error, setError] = useState(false)
-
-  useEffect(() => {
-    setError(false)
-  }, [src])
-
-  return (
-    <div className="relative overflow-hidden bg-black">
-      <div className="relative aspect-4/3 w-full sm:aspect-video md:aspect-16/8">
-        {error ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-white/40">
-            <IconPhoto size={36} strokeWidth={1.2} />
-
-            <p className="text-xs">Gambar tidak tersedia</p>
-          </div>
-        ) : (
-          <Image
-            fill
-            priority
-            quality={85}
-            src={src}
-            alt={alt}
-            sizes="(max-width:768px) 95vw, 80vw"
-            className="object-contain"
-            onError={() => setError(true)}
-          />
-        )}
-      </div>
-
-      <DialogClose asChild>
-        <button className="absolute top-3 right-3 z-20 rounded-full bg-black/50 p-1.5 text-white transition-colors hover:bg-black/70">
-          <IconX size={15} />
-        </button>
-      </DialogClose>
-
-      {currentIndex > 0 && (
-        <button
-          onClick={onPrev}
-          className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white transition-colors hover:bg-black/65"
-        >
-          <IconChevronLeft size={18} />
-        </button>
-      )}
-
-      {currentIndex < total - 1 && (
-        <button
-          onClick={onNext}
-          className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white transition-colors hover:bg-black/65"
-        >
-          <IconChevronRight size={18} />
-        </button>
-      )}
-
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-0.5 text-[10px] text-white/70 md:text-xs">
-        {currentIndex + 1} / {total}
-      </div>
     </div>
   )
 }
