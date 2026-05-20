@@ -161,28 +161,8 @@ export async function reklasifikasiSemua(): Promise<{ berhasil: number; gagal: n
 
     return { berhasil: batchResult.berhasil, gagal: batchResult.gagal }
   } catch {
-    const aturan = await fetchAturanAktif()
-    let berhasil = 0
-    let gagal = 0
+     console.error('ML Batch gagal:', pErr)
 
-    for (const p of list) {
-      try {
-        const hasil = klasifikasiSantri(p, aturan)
-        await supabase.from('rekomendasi').insert({
-          santri_id: p.santri_id,
-          status: hasil.status,
-          alasan: hasil.alasan,
-          fitur_snapshot: hasil.fitur_snapshot,
-          probabilitas: hasil.probabilitas,
-          sumber: 'rule-based' as const,
-          model_versi: hasil.model_versi,
-        })
-        berhasil++
-      } catch {
-        gagal++
-      }
-    }
-
-    return { berhasil, gagal }
+     throw new Error('ML Service gagal dihubungi')
   }
 }

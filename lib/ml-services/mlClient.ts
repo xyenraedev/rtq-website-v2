@@ -1,13 +1,8 @@
 /**
  * HTTP Client untuk komunikasi dengan ML Service (Flask)
- *
- * ENV:
- *   ML_SERVICE_URL=http://localhost:5000         (server-side)
- *   NEXT_PUBLIC_ML_SERVICE_URL=http://localhost:5000  (client-side, opsional)
  */
 
-const ML_SERVICE_URL =
-  process.env.ML_SERVICE_URL || process.env.NEXT_PUBLIC_ML_SERVICE_URL || 'http://localhost:5000'
+const ML_SERVICE_URL = process.env.NEXT_PUBLIC_ML_SERVICE_URL
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
