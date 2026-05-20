@@ -46,7 +46,7 @@ const CardRelatedBerita: React.FC<RelatedNewsCardProps> = ({ item }) => {
       className="
     flex h-full flex-col overflow-hidden
     transition-all duration-300
-    hover:-translate-y-1 hover:shadow-xl
+    hover:-translate-y-1
   "
     >
       <Link href={`/berita/${item.slug}`} className="flex h-full flex-col">

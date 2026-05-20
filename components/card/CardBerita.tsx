@@ -54,30 +54,23 @@ const CardBerita: React.FC<CardBeritaProps> = ({ item, loading }) => {
   if (loading || !item) return <CardBeritaSkeleton />
 
   return (
-    <article className="group bg-card rounded-xl border border-border/50 overflow-hidden hover:border-border hover:shadow-md transition-all duration-300 h-full">
+    <article className="group overflow-hidden hover:border-border hover:shadow-md transition-all duration-300 h-full">
       <Link href={`/berita/${item.slug}`} className="flex flex-row md:flex-col h-full">
         <div className="relative shrink-0 w-28 self-stretch md:w-full md:h-48 overflow-hidden">
           <Image
             src={item.gambar}
             alt={item.judul}
             fill
-            className="object-cover group-hover:scale-105 transition-transform duration-500"
+            className="object-cover group-hover:scale-105 transition-transform duration-500 rounded"
             sizes="(max-width: 768px) 112px, 400px"
           />
-          <div className="absolute top-2 right-2 hidden md:flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-[11px]">
-            <IconEye size={11} />
-            {item.views}
-          </div>
+
         </div>
 
         <div className="flex flex-col flex-1 p-3 md:p-4 min-w-0 gap-1.5">
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full truncate max-w-30">
               {item.kategori.nama}
-            </span>
-            <span className="md:hidden flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
-              <IconEye size={10} />
-              {item.views}
             </span>
           </div>
 

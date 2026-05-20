@@ -6,29 +6,23 @@ import {
   IconPlus,
   IconEdit,
   IconTrash,
-  IconEye,
   IconClock,
   IconCalendar,
   IconNews,
-  IconTrendingUp,
   IconBookmark,
-  IconChartBar,
   IconLoader2,
   IconAlertCircle,
   IconRefresh,
   IconChevronRight,
+  IconFileText,
+  IconHourglass,
+  IconCircleCheck,
 } from '@tabler/icons-react'
 import { DataTable, type ColumnDef, type DataTableFilter } from '@/components/data-table'
 import { ModalTambahBerita } from '@/components/protected/berita/modal-tambah-berita'
 import { ModalEditBerita } from '@/components/protected/berita/modal-edit-berita'
 import { ModalDeleteBerita } from '@/components/protected/berita/modal-delete-berita'
-import {
-  fetchBerita,
-  deleteBerita,
-  deleteBulkBerita,
-  type Berita,
-  type BeritaKategori,
-} from '@/lib/berita'
+import { fetchBerita, deleteBulkBerita, type Berita, type BeritaKategori } from '@/lib/berita'
 import { toast } from 'sonner'
 import { fetchKategori } from '@/lib/berita-kategori'
 
@@ -44,6 +38,17 @@ function formatTanggal(iso: string) {
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 
+interface StatCardProps {
+  icon: React.ReactNode
+  label: string
+  value: string | number
+  sub: string
+  accent: string
+  ctaLabel?: string
+  onCtaClick?: () => void
+  ctaVariant?: 'ghost' | 'outline' | 'default'
+}
+
 function StatCard({
   icon,
   label,
@@ -53,17 +58,8 @@ function StatCard({
   ctaLabel,
   onCtaClick,
   ctaVariant = 'ghost',
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string | number
-  sub: string
-  accent: string
-  ctaLabel?: string
-  onCtaClick?: () => void
-  ctaVariant?: 'ghost' | 'outline' | 'default'
-}) {
-  const ctaStyles = {
+}: StatCardProps) {
+  const ctaStyles: Record<string, string> = {
     ghost: 'text-primary hover:bg-primary/10',
     outline: 'border border-input hover:bg-muted text-foreground',
     default: 'bg-primary text-primary-foreground hover:opacity-90',
@@ -71,7 +67,7 @@ function StatCard({
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group">
-      {/* ── Desktop Layout (1 Row) ── */}
+      {/* ── Desktop Layout ── */}
       <div className="hidden sm:flex items-start gap-4">
         <div className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${accent}`}>
           {icon}
@@ -102,7 +98,7 @@ function StatCard({
         )}
       </div>
 
-      {/* ── Mobile Layout (2 Rows) ── */}
+      {/* ── Mobile Layout ── */}
       <div className="flex sm:hidden flex-col gap-3">
         <div className="flex items-start gap-3">
           <div
@@ -151,13 +147,11 @@ export default function BeritaPage() {
   const [error, setError] = useState<string | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [editBerita, setEditBerita] = useState<Berita | null>(null)
   const [deleteBeritaTarget, setDeleteBeritaTarget] = useState<Berita | null>(null)
   const [externalFilter, setExternalFilter] = useState<Record<string, string>>({})
 
-  const handleManagePublished = () => {
+  const handleManageDraft = () => {
     setExternalFilter({ status: 'draft' })
   }
 
@@ -202,26 +196,16 @@ export default function BeritaPage() {
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
-  const totalViews = data.reduce((a, b) => a + b.views, 0)
   const publishedCount = data.filter((b) => b.status === 'published').length
+  const draftCount = data.length - publishedCount
+  const avgWaktuBaca = data.length
+    ? Math.round(data.reduce((a, b) => a + b.waktu_baca, 0) / data.length)
+    : 0
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const recentCount = data.filter((b) => new Date(b.created_at) >= sevenDaysAgo).length
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-
-  async function handleDelete(id: string) {
-    setDeletingId(id)
-    try {
-      await deleteBerita(id)
-      setData((d) => d.filter((b) => b.id !== id))
-      setConfirmDeleteId(null)
-      toast.success('Berita berhasil dihapus')
-    } catch (e: unknown) {
-      toast.error('Gagal menghapus berita', {
-        description: e instanceof Error ? e.message : undefined,
-      })
-    } finally {
-      setDeletingId(null)
-    }
-  }
 
   async function handleBulkDelete(keys: string[]) {
     try {
@@ -280,7 +264,6 @@ export default function BeritaPage() {
       header: 'Kategori',
       cell: (row) => {
         const nama = row.berita_kategori?.nama ?? '-'
-
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-secondary/50 border-border text-foreground dark:bg-white/5 dark:border-white/10">
             <span className="w-1.5 h-1.5 rounded-full bg-primary" />
@@ -301,19 +284,9 @@ export default function BeritaPage() {
       ),
     },
     {
-      key: 'views',
-      header: 'Views',
-      sortable: true,
-      cell: (row) => (
-        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <IconEye size={13} />
-          {row.views.toLocaleString()}
-        </span>
-      ),
-    },
-    {
       key: 'waktu_baca',
       header: 'Waktu Baca',
+      sortable: true,
       cell: (row) => (
         <span className="flex items-center gap-1.5 text-sm text-muted-foreground whitespace-nowrap">
           <IconClock size={13} />
@@ -357,34 +330,13 @@ export default function BeritaPage() {
           >
             <IconEdit size={15} />
           </button>
-
-          {confirmDeleteId === row.id ? (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => handleDelete(row.id)}
-                disabled={deletingId === row.id}
-                className="px-2 py-1 text-xs bg-destructive text-destructive-foreground rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-60 flex items-center gap-1"
-              >
-                {deletingId === row.id && <IconLoader2 size={11} className="animate-spin" />}
-                Ya
-              </button>
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                disabled={deletingId === row.id}
-                className="px-2 py-1 text-xs bg-secondary text-secondary-foreground rounded-lg font-medium hover:bg-muted transition-colors disabled:opacity-60"
-              >
-                Tidak
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setDeleteBeritaTarget(row)}
-              className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-              title="Hapus"
-            >
-              <IconTrash size={15} />
-            </button>
-          )}
+          <button
+            onClick={() => setDeleteBeritaTarget(row)}
+            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+            title="Hapus"
+          >
+            <IconTrash size={15} />
+          </button>
         </div>
       ),
     },
@@ -404,7 +356,7 @@ export default function BeritaPage() {
             <h1 className="text-2xl font-bold text-foreground">Kelola Berita</h1>
           </div>
           <p className="text-sm text-muted-foreground pl-11">
-            Manajemen konten berita & artikel pesantren
+            Manajemen konten berita &amp; artikel pesantren
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -446,7 +398,7 @@ export default function BeritaPage() {
             loading ? (
               <IconLoader2 size={18} className="text-primary animate-spin" />
             ) : (
-              <IconNews size={18} className="text-primary" />
+              <IconFileText size={18} className="text-primary" />
             )
           }
           label="Total Berita"
@@ -455,28 +407,28 @@ export default function BeritaPage() {
           accent="bg-primary/10"
         />
         <StatCard
-          icon={<IconChartBar size={18} className="text-violet-600" />}
-          label="Rata-rata Views"
-          value={loading ? '—' : data.length ? Math.round(totalViews / data.length) : 0}
-          sub="Per artikel"
-          accent="bg-violet-100 dark:bg-violet-950"
-        />
-        <StatCard
-          icon={<IconTrendingUp size={18} className="text-sky-600" />}
-          label="Total Views"
-          value={loading ? '—' : totalViews.toLocaleString()}
-          sub="Akumulasi berita"
-          accent="bg-sky-100 dark:bg-sky-950"
-        />
-        <StatCard
-          icon={<IconBookmark size={18} className="text-emerald-600" />}
+          icon={<IconCircleCheck size={18} className="text-emerald-600" />}
           label="Published"
           value={loading ? '—' : publishedCount}
-          sub={loading ? '' : `${data.length - publishedCount} draft tersisa`}
+          sub={loading ? '' : `dari ${data.length} total berita`}
           accent="bg-emerald-100 dark:bg-emerald-950"
+        />
+        <StatCard
+          icon={<IconBookmark size={18} className="text-amber-600" />}
+          label="Draft"
+          value={loading ? '—' : draftCount}
+          sub={loading ? '' : `${draftCount} belum diterbitkan`}
+          accent="bg-amber-100 dark:bg-amber-950"
           ctaLabel="Kelola"
-          onCtaClick={handleManagePublished}
+          onCtaClick={handleManageDraft}
           ctaVariant="outline"
+        />
+        <StatCard
+          icon={<IconHourglass size={18} className="text-sky-600" />}
+          label="Rata-rata Baca"
+          value={loading ? '—' : `${avgWaktuBaca} mnt`}
+          sub={loading ? '' : `${recentCount} artikel baru minggu ini`}
+          accent="bg-sky-100 dark:bg-sky-950"
         />
       </div>
 
