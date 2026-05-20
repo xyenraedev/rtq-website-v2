@@ -18,15 +18,35 @@ import {
   IconHourglass,
   IconCircleCheck,
 } from '@tabler/icons-react'
+
+import { toast } from 'sonner'
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+
+import { Badge } from '@/components/ui/badge'
+
 import { DataTable, type ColumnDef, type DataTableFilter } from '@/components/data-table'
+
 import { ModalTambahBerita } from '@/components/protected/berita/modal-tambah-berita'
 import { ModalEditBerita } from '@/components/protected/berita/modal-edit-berita'
 import { ModalDeleteBerita } from '@/components/protected/berita/modal-delete-berita'
+
 import { fetchBerita, deleteBulkBerita, type Berita, type BeritaKategori } from '@/lib/berita'
-import { toast } from 'sonner'
+
 import { fetchKategori } from '@/lib/berita-kategori'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 function formatTanggal(iso: string) {
   return new Date(iso).toLocaleDateString('id-ID', {
@@ -36,106 +56,40 @@ function formatTanggal(iso: string) {
   })
 }
 
-// ─── StatCard ─────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 interface StatCardProps {
-  icon: React.ReactNode
-  label: string
+  title: string
   value: string | number
-  sub: string
-  accent: string
-  ctaLabel?: string
-  onCtaClick?: () => void
-  ctaVariant?: 'ghost' | 'outline' | 'default'
+  description: string
+  icon: React.ReactNode
 }
 
-function StatCard({
-  icon,
-  label,
-  value,
-  sub,
-  accent,
-  ctaLabel,
-  onCtaClick,
-  ctaVariant = 'ghost',
-}: StatCardProps) {
-  const ctaStyles: Record<string, string> = {
-    ghost: 'text-primary hover:bg-primary/10',
-    outline: 'border border-input hover:bg-muted text-foreground',
-    default: 'bg-primary text-primary-foreground hover:opacity-90',
-  }
-
+function StatCard({ title, value, description, icon }: StatCardProps) {
   return (
-    <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group">
-      {/* ── Desktop Layout ── */}
-      <div className="hidden sm:flex items-start gap-4">
-        <div className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${accent}`}>
-          {icon}
-        </div>
-        <div className="flex-1 min-w-0 space-y-0.5">
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-            {label}
-          </p>
-          <p className="text-2xl font-bold text-foreground leading-tight wrap-break-word">
-            {value}
-          </p>
-          <p className="text-xs text-muted-foreground">{sub}</p>
-        </div>
-        {ctaLabel && onCtaClick && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onCtaClick()
-            }}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 mt-1 ${ctaStyles[ctaVariant]}`}
-          >
-            {ctaLabel}
-            <IconChevronRight
-              size={14}
-              className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
-            />
-          </button>
-        )}
-      </div>
+    <Card className="border-border/60 shadow-sm">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {title}
+            </p>
 
-      {/* ── Mobile Layout ── */}
-      <div className="flex sm:hidden flex-col gap-3">
-        <div className="flex items-start gap-3">
-          <div
-            className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${accent}`}
-          >
+            <h3 className="text-2xl font-bold tracking-tight">{value}</h3>
+
+            <p className="text-xs text-muted-foreground">{description}</p>
+          </div>
+
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             {icon}
           </div>
-          <div className="flex-1 min-w-0 space-y-0.5">
-            <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide leading-tight">
-              {label}
-            </p>
-            <p className="text-lg font-bold text-foreground leading-tight wrap-break-word">
-              {value}
-            </p>
-          </div>
         </div>
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] text-muted-foreground">{sub}</p>
-          {ctaLabel && onCtaClick && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onCtaClick()
-              }}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-medium transition-colors shrink-0 ${ctaStyles[ctaVariant]}`}
-            >
-              {ctaLabel}
-              <IconChevronRight size={12} className="opacity-70" />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────────────────────
 
 export default function BeritaPage() {
   const router = useRouter()
@@ -143,33 +97,30 @@ export default function BeritaPage() {
 
   const [data, setData] = useState<Berita[]>([])
   const [kategoris, setKategoris] = useState<BeritaKategori[]>([])
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editBerita, setEditBerita] = useState<Berita | null>(null)
   const [deleteBeritaTarget, setDeleteBeritaTarget] = useState<Berita | null>(null)
+
+  // bulk delete
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [deletingBulk, setDeletingBulk] = useState(false)
+
   const [externalFilter, setExternalFilter] = useState<Record<string, string>>({})
 
-  const handleManageDraft = () => {
-    setExternalFilter({ status: 'draft' })
-  }
-
-  function handleUpdate(updated: Berita) {
-    setData((d) => d.map((b) => (b.id === updated.id ? updated : b)))
-  }
-
-  function handleDeleted(id: string) {
-    setData((d) => d.filter((b) => b.id !== id))
-  }
-
-  // ── Load data ──────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
       const [beritaList, kategoriList] = await Promise.all([fetchBerita(), fetchKategori()])
+
       setData(beritaList)
       setKategoris(kategoriList)
     } catch (e: unknown) {
@@ -183,65 +134,118 @@ export default function BeritaPage() {
     loadData()
   }, [loadData])
 
+  // ───────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const editId = searchParams.get('edit')
+
     if (!editId || data.length === 0) return
 
     const target = data.find((b) => b.id === editId)
+
     if (!target) return
 
     setEditBerita(target)
-    router.replace('/protected/berita', { scroll: false })
+
+    router.replace('/protected/berita', {
+      scroll: false,
+    })
   }, [searchParams, data, router])
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const publishedCount = data.filter((b) => b.status === 'published').length
-  const draftCount = data.length - publishedCount
+
+  const draftCount = data.filter((b) => b.status === 'draft').length
+
   const avgWaktuBaca = data.length
-    ? Math.round(data.reduce((a, b) => a + b.waktu_baca, 0) / data.length)
+    ? Math.round(data.reduce((acc, item) => acc + item.waktu_baca, 0) / data.length)
     : 0
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+
   const recentCount = data.filter((b) => new Date(b.created_at) >= sevenDaysAgo).length
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
-  async function handleBulkDelete(keys: string[]) {
-    try {
-      await deleteBulkBerita(keys)
-      setData((d) => d.filter((b) => !keys.includes(b.id)))
-      toast.success(`${keys.length} berita berhasil dihapus`)
-    } catch (e: unknown) {
-      toast.error('Gagal menghapus beberapa berita', {
-        description: e instanceof Error ? e.message : undefined,
-      })
-    }
+  function handleManageDraft() {
+    setExternalFilter({
+      status: 'draft',
+    })
   }
 
   function handleSave(berita: Berita) {
-    setData((d) => [berita, ...d])
+    setData((prev) => [berita, ...prev])
   }
 
-  // ── Dynamic filter options ─────────────────────────────────────────────────
+  function handleUpdate(updated: Berita) {
+    setData((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
+  }
+
+  function handleDeleted(id: string) {
+    setData((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // BULK DELETE
+  // ───────────────────────────────────────────────────────────────────────────
+
+  function handleBulkDelete(ids: string[]) {
+    setSelectedIds(ids)
+    setBulkDeleteOpen(true)
+  }
+
+  async function confirmBulkDelete() {
+    try {
+      setDeletingBulk(true)
+
+      await deleteBulkBerita(selectedIds)
+
+      setData((prev) => prev.filter((item) => !selectedIds.includes(item.id)))
+
+      toast.success('Berhasil menghapus berita', {
+        description: `${selectedIds.length} berita berhasil dihapus`,
+      })
+
+      setBulkDeleteOpen(false)
+      setSelectedIds([])
+    } catch (e: unknown) {
+      toast.error('Gagal menghapus berita', {
+        description: e instanceof Error ? e.message : undefined,
+      })
+    } finally {
+      setDeletingBulk(false)
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
 
   const tableFilters: DataTableFilter<Berita>[] = [
     {
       key: 'kategori_id',
       label: 'Kategori',
-      options: kategoris.map((k) => ({ label: k.nama, value: k.id })),
+      options: kategoris.map((k) => ({
+        label: k.nama,
+        value: k.id,
+      })),
     },
     {
       key: 'status',
       label: 'Status',
       options: [
-        { label: 'Published', value: 'published' },
-        { label: 'Draft', value: 'draft' },
+        {
+          label: 'Published',
+          value: 'published',
+        },
+        {
+          label: 'Draft',
+          value: 'draft',
+        },
       ],
     },
   ]
 
-  // ── Columns ────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const columns: ColumnDef<Berita>[] = [
     {
@@ -249,217 +253,221 @@ export default function BeritaPage() {
       header: 'Judul',
       sortable: true,
       cell: (row) => (
-        <div className="min-w-0">
-          <span className="font-semibold text-foreground line-clamp-1 hover:text-primary transition-colors">
-            {row.judul}
-          </span>
+        <div className="min-w-60 space-y-1">
+          <p className="line-clamp-1 font-semibold text-foreground">{row.judul}</p>
+
           {row.ringkasan && (
-            <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{row.ringkasan}</p>
+            <p className="line-clamp-2 text-xs text-muted-foreground">{row.ringkasan}</p>
           )}
         </div>
       ),
     },
+
     {
       key: 'kategori_id',
       header: 'Kategori',
-      cell: (row) => {
-        const nama = row.berita_kategori?.nama ?? '-'
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-secondary/50 border-border text-foreground dark:bg-white/5 dark:border-white/10">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            <span>{nama}</span>
-          </span>
-        )
-      },
+      cell: (row) => (
+        <Badge variant="secondary" className="rounded-full">
+          {row.berita_kategori?.nama ?? '-'}
+        </Badge>
+      ),
     },
+
     {
       key: 'created_at',
-      header: 'Tanggal Dibuat',
+      header: 'Tanggal',
       sortable: true,
       cell: (row) => (
-        <span className="flex items-center gap-1.5 text-sm text-muted-foreground whitespace-nowrap">
-          <IconCalendar size={13} />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
+          <IconCalendar size={14} />
           {formatTanggal(row.created_at)}
-        </span>
+        </div>
       ),
     },
+
     {
       key: 'waktu_baca',
-      header: 'Waktu Baca',
+      header: 'Baca',
       sortable: true,
       cell: (row) => (
-        <span className="flex items-center gap-1.5 text-sm text-muted-foreground whitespace-nowrap">
-          <IconClock size={13} />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
+          <IconClock size={14} />
           {row.waktu_baca} menit
-        </span>
+        </div>
       ),
     },
+
     {
       key: 'status',
       header: 'Status',
       cell: (row) => (
-        <span
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-            row.status === 'published'
-              ? 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
-              : 'bg-secondary text-muted-foreground border-border'
-          }`}
+        <Badge
+          variant={row.status === 'published' ? 'default' : 'secondary'}
+          className="rounded-full"
         >
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              row.status === 'published' ? 'bg-emerald-500' : 'bg-muted-foreground'
-            }`}
-          />
           {row.status === 'published' ? 'Published' : 'Draft'}
-        </span>
+        </Badge>
       ),
     },
+
     {
       key: 'id',
       header: 'Aksi',
       align: 'center',
       cell: (row) => (
         <div
-          className="flex items-center justify-center gap-1.5"
+          className="flex items-center justify-center gap-1"
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={() => setEditBerita(row)}
-            className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-            title="Edit"
+            className="rounded-lg p-2 text-primary transition-colors hover:bg-primary/10"
           >
-            <IconEdit size={15} />
+            <IconEdit size={16} />
           </button>
+
           <button
             onClick={() => setDeleteBeritaTarget(row)}
-            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-            title="Hapus"
+            className="rounded-lg p-2 text-destructive transition-colors hover:bg-destructive/10"
           >
-            <IconTrash size={15} />
+            <IconTrash size={16} />
           </button>
         </div>
       ),
     },
   ]
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-6">
+    <div className="min-h-screen bg-background p-4 md:p-6">
       {/* Header */}
-      <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="flex items-center gap-2.5 mb-1">
-            <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
-              <IconNews size={18} className="text-primary-foreground" />
+          <div className="mb-2 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+              <IconNews size={20} />
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Kelola Berita</h1>
+
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Kelola Berita</h1>
+
+              <p className="text-sm text-muted-foreground">Manajemen berita & artikel pesantren</p>
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground pl-11">
-            Manajemen konten berita &amp; artikel pesantren
-          </p>
         </div>
+
         <div className="flex items-center gap-2">
           <button
             onClick={loadData}
             disabled={loading}
-            className="flex items-center gap-2 border border-border text-foreground px-4 py-2.5 rounded-xl font-medium text-sm hover:bg-muted transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl border bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
           >
             <IconRefresh size={16} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
+
           <button
             onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
           >
-            <IconPlus size={17} />
-            Tambah Baru
+            <IconPlus size={16} />
+            Tambah
           </button>
         </div>
       </div>
 
-      <hr className="my-4" />
-
       {/* Error */}
       {error && (
-        <div className="mb-6 flex items-center gap-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl px-4 py-3">
-          <IconAlertCircle size={18} className="shrink-0" />
-          <span className="text-sm font-medium">{error}</span>
-          <button onClick={loadData} className="ml-auto text-xs underline hover:no-underline">
-            Coba lagi
-          </button>
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
+          <IconAlertCircle size={18} />
+
+          <p className="text-sm font-medium">{error}</p>
         </div>
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
+          title="Total Berita"
+          value={loading ? '—' : data.length}
+          description="Semua artikel"
           icon={
             loading ? (
-              <IconLoader2 size={18} className="text-primary animate-spin" />
+              <IconLoader2 size={18} className="animate-spin" />
             ) : (
-              <IconFileText size={18} className="text-primary" />
+              <IconFileText size={18} />
             )
           }
-          label="Total Berita"
-          value={loading ? '—' : data.length}
-          sub="Semua kategori"
-          accent="bg-primary/10"
         />
+
         <StatCard
-          icon={<IconCircleCheck size={18} className="text-emerald-600" />}
-          label="Published"
+          title="Published"
           value={loading ? '—' : publishedCount}
-          sub={loading ? '' : `dari ${data.length} total berita`}
-          accent="bg-emerald-100 dark:bg-emerald-950"
+          description={`${publishedCount} artikel aktif`}
+          icon={<IconCircleCheck size={18} />}
         />
+
         <StatCard
-          icon={<IconBookmark size={18} className="text-amber-600" />}
-          label="Draft"
+          title="Draft"
           value={loading ? '—' : draftCount}
-          sub={loading ? '' : `${draftCount} belum diterbitkan`}
-          accent="bg-amber-100 dark:bg-amber-950"
-          ctaLabel="Kelola"
-          onCtaClick={handleManageDraft}
-          ctaVariant="outline"
+          description={`${draftCount} belum diterbitkan`}
+          icon={<IconBookmark size={18} />}
         />
+
         <StatCard
-          icon={<IconHourglass size={18} className="text-sky-600" />}
-          label="Rata-rata Baca"
-          value={loading ? '—' : `${avgWaktuBaca} mnt`}
-          sub={loading ? '' : `${recentCount} artikel baru minggu ini`}
-          accent="bg-sky-100 dark:bg-sky-950"
+          title="Rata-rata Baca"
+          value={loading ? '—' : `${avgWaktuBaca} menit`}
+          description={`${recentCount} artikel minggu ini`}
+          icon={<IconHourglass size={18} />}
         />
       </div>
 
       {/* Table */}
-      {loading && data.length === 0 ? (
-        <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
-          <IconLoader2 size={20} className="animate-spin" />
-          <span className="text-sm">Memuat data...</span>
-        </div>
-      ) : (
-        <DataTable<Berita>
-          data={data}
-          columns={columns}
-          rowKey="id"
-          pageSize={10}
-          searchFields={['judul', 'ringkasan']}
-          searchPlaceholder="Cari berita..."
-          filters={tableFilters}
-          selectable
-          onBulkDelete={(keys) => handleBulkDelete(keys as string[])}
-          emptyMessage="Tidak ada berita ditemukan."
-          toolbarExtra={
-            <span className="text-xs text-muted-foreground">
-              Total <span className="font-semibold text-foreground">{data.length}</span> berita
-            </span>
-          }
-          externalFilter={externalFilter}
-        />
-      )}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <CardTitle>Daftar Berita</CardTitle>
 
-      {/* Modals */}
+              <CardDescription>Total {data.length} berita tersedia</CardDescription>
+            </div>
+
+            <button
+              onClick={handleManageDraft}
+              className="hidden rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted md:block"
+            >
+              Lihat Draft
+            </button>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {loading && data.length === 0 ? (
+            <div className="flex h-40 items-center justify-center gap-2 text-muted-foreground">
+              <IconLoader2 size={18} className="animate-spin" />
+
+              <span className="text-sm">Memuat data...</span>
+            </div>
+          ) : (
+            <DataTable<Berita>
+              data={data}
+              columns={columns}
+              rowKey="id"
+              pageSize={10}
+              selectable
+              filters={tableFilters}
+              searchFields={['judul', 'ringkasan']}
+              searchPlaceholder="Cari berita..."
+              externalFilter={externalFilter}
+              emptyMessage="Tidak ada berita ditemukan."
+              onBulkDelete={(keys) => handleBulkDelete(keys as string[])}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal Tambah */}
       <ModalTambahBerita
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -467,6 +475,7 @@ export default function BeritaPage() {
         kategoris={kategoris}
       />
 
+      {/* Modal Edit */}
       {editBerita && (
         <ModalEditBerita
           open={!!editBerita}
@@ -477,6 +486,7 @@ export default function BeritaPage() {
         />
       )}
 
+      {/* Modal Delete Single */}
       {deleteBeritaTarget && (
         <ModalDeleteBerita
           open={!!deleteBeritaTarget}
@@ -485,6 +495,43 @@ export default function BeritaPage() {
           berita={deleteBeritaTarget}
         />
       )}
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus beberapa berita?</AlertDialogTitle>
+
+            <AlertDialogDescription>
+              Tindakan ini tidak dapat dibatalkan.{' '}
+              <span className="font-semibold text-foreground">{selectedIds.length} berita</span>{' '}
+              akan dihapus permanen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingBulk}>Batal</AlertDialogCancel>
+
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              disabled={deletingBulk}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingBulk ? (
+                <>
+                  <IconLoader2 size={16} className="mr-2 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                <>
+                  <IconTrash size={16} className="mr-2" />
+                  Hapus
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
