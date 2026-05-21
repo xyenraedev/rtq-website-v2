@@ -75,7 +75,7 @@ export default function KenaliKami() {
 
               <div
                 className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  activeIndex === index ? 'max-h-[500px]' : 'max-h-0'
+                  activeIndex === index ? 'max-h-125' : 'max-h-0'
                 }`}
               >
                 <div className="p-4">
@@ -89,7 +89,7 @@ export default function KenaliKami() {
 
       {/* Image Section */}
       <div className="flex-1 order-1 lg:order-2 flex justify-center items-center">
-        <div className="relative w-[260px] h-[260px] sm:w-[360px] sm:h-[360px] lg:w-[460px] lg:h-[460px]">
+        <div className="relative w-65 h-65 sm:w-90 sm:h-90 lg:w-115 lg:h-115">
           <Image
             src="/images/hero-3.svg"
             alt="Hero Image"

@@ -29,7 +29,7 @@ const ScrollToTopButton = () => {
     >
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        className="relative p-2 sm:p-3 bg-gradient-to-br from-green-600 to-emerald-500 rounded-full shadow-lg hover:shadow-xl transition-shadow"
+        className="relative p-2 sm:p-3 bg-linear-to-br from-green-600 to-emerald-500 rounded-full shadow-lg hover:shadow-xl transition-shadow"
         aria-label="Scroll to top"
       >
         <svg

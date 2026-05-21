@@ -210,7 +210,7 @@ function ConfirmModal({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === overlayRef.current) onCancel()
       }}
@@ -1183,7 +1183,7 @@ export default function MonitoringSantriPage() {
               <select
                 value={filterJilid}
                 onChange={(e) => setFilterJilid(e.target.value)}
-                className="px-4 py-2.5 rounded-xl border border-border bg-background text-sm min-w-[140px] focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="px-4 py-2.5 rounded-xl border border-border bg-background text-sm min-w-35 focus:outline-none focus:ring-2 focus:ring-primary/30"
               >
                 <option value="">Semua Jilid</option>
                 {[0, 1, 2, 3, 4, 5, 6, 7].map((j) => (

@@ -21,9 +21,8 @@ export default function KelasUnggulan() {
       animate="visible"
     >
       <div className="sm:text-center mb-12">
-        <h2 className="text-2xl sm:text-4xl font-bold mb-4">Kelas Unggulan</h2>
-
-        <p className="sm:text-lg text-gray-600 max-w-2xl mx-auto">
+        <h2 className="text-2xl md:text-3xl font-bold mb-4">Kelas Unggulan</h2>
+        <p className="text-sm md:text-base text-gray-600 max-w-2xl mx-auto">
           Kelas Unggulan hadir untuk membantu santri menghafal, membaca, dan memahami Al-Qur&#39;an
           dengan cara yang menyenangkan, interaktif, serta penuh makna.
         </p>

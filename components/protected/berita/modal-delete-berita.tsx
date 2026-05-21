@@ -158,7 +158,7 @@ export function ModalDeleteBerita({ open, onClose, berita, onDeleted }: ModalDel
                     className="object-cover opacity-80"
                   />
 
-                  <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent" />
+                  <div className="absolute inset-0 bg-linear-to-t from-card/80 to-transparent" />
                 </div>
               )}
 

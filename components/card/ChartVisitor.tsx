@@ -57,9 +57,6 @@ export function ChartVisitor() {
   const totalMingguIni = data.reduce((s, d) => s + d.unique_visitor, 0)
 
   return (
-    /* 1. Tambahkan 'h-full' agar Card mengambil seluruh tinggi
-         yang tersedia dari parent (grid/flex)
-    */
     <Card className="flex flex-col h-full">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between">
@@ -74,18 +71,12 @@ export function ChartVisitor() {
         </div>
       </CardHeader>
 
-      {/* 2. Gunakan 'flex-1' agar konten ini mengisi sisa ruang Card.
-           'min-h-[250px]' disarankan agar chart tidak terlalu gepeng di layar kecil.
-      */}
-      <CardContent className="flex-1 pb-4 min-h-[220px]">
+      <CardContent className="flex-1 pb-4 min-h-55">
         {data.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-muted-foreground">Belum ada data pengunjung</p>
           </div>
         ) : (
-          /* 3. Ubah height menjadi "100%" agar ResponsiveContainer
-               mengikuti tinggi dari CardContent yang sudah flex-1
-          */
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <defs>

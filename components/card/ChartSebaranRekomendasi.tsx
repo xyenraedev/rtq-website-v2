@@ -135,7 +135,7 @@ export function ChartSebaranRekomendasi() {
           <CardDescription>Belum ada data rekomendasi</CardDescription>
         </CardHeader>
 
-        <CardContent className="flex h-[320px] items-center justify-center">
+        <CardContent className="flex h-80 items-center justify-center">
           <p className="text-sm text-muted-foreground">Tidak ada data</p>
         </CardContent>
       </Card>
@@ -153,7 +153,7 @@ export function ChartSebaranRekomendasi() {
       </CardHeader>
 
       <CardContent>
-        <div className="h-[280px] w-full">
+        <div className="h-70 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie

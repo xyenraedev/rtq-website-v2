@@ -9,7 +9,7 @@ export default function SkeletonGaleri() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Hero skeleton */}
       <section className="relative overflow-hidden">
-        <div className="relative flex min-h-[340px] items-center justify-center md:min-h-[60vh]">
+        <div className="relative flex min-h-85 items-center justify-center md:min-h-[60vh]">
           <Skeleton className="absolute inset-0 rounded-none" />
 
           <div className="relative z-10 w-full max-w-3xl space-y-3 px-4 py-16 text-center md:space-y-4 md:py-0">

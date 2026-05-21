@@ -304,7 +304,7 @@ export function DataTable<T extends object>({
       <div className="flex items-center gap-2.5 p-3.5 border-b border-border flex-wrap bg-card">
         {/* Search */}
         {searchFields.length > 0 && (
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <div className="relative flex-1 min-w-45 max-w-xs">
             <IconSearch
               size={14}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -346,7 +346,7 @@ export function DataTable<T extends object>({
             {openFilter === String(f.key) && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setOpenFilter(null)} />
-                <div className="absolute top-full mt-1 left-0 z-20 bg-popover border border-border rounded-xl shadow-xl overflow-hidden min-w-[140px]">
+                <div className="absolute top-full mt-1 left-0 z-20 bg-popover border border-border rounded-xl shadow-xl overflow-hidden min-w-35">
                   <button
                     onClick={() => {
                       setFilterValues((p) => ({ ...p, [String(f.key)]: '' }))
@@ -390,7 +390,7 @@ export function DataTable<T extends object>({
             <IconRefresh size={14} />
             <span className="hidden sm:inline">Reset</span>
             {/* Badge counter */}
-            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+            <span className="inline-flex items-center justify-center min-w-4.5 h-4.5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">
               {modificationCount}
             </span>
           </button>
@@ -546,7 +546,7 @@ export function DataTable<T extends object>({
                   setPage(1)
                 }}
               >
-                <SelectTrigger className="h-8 w-[70px] bg-background border border-border rounded-md text-xs">
+                <SelectTrigger className="h-8 w-17.5 bg-background border border-border rounded-md text-xs">
                   <SelectValue placeholder="Rows" />
                 </SelectTrigger>
                 <SelectContent
@@ -582,7 +582,7 @@ export function DataTable<T extends object>({
                   <button
                     key={p}
                     onClick={() => setPage(p as number)}
-                    className={`min-w-[36px] h-8 px-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                    className={`min-w-9 h-8 px-2 rounded-md text-sm font-medium transition-all duration-200 ${
                       safePage === p
                         ? 'bg-primary text-primary-foreground shadow-sm scale-105'
                         : 'border border-input text-muted-foreground hover:bg-muted hover:text-accent-foreground hover:border-accent-foreground/20'
@@ -631,7 +631,7 @@ export function DataTable<T extends object>({
                   setPage(1)
                 }}
               >
-                <SelectTrigger className="h-9 w-[110px] bg-background border border-border rounded-lg text-sm focus:ring-1 focus:ring-ring">
+                <SelectTrigger className="h-9 w-27.5 bg-background border border-border rounded-lg text-sm focus:ring-1 focus:ring-ring">
                   <SelectValue placeholder="Rows" />
                 </SelectTrigger>
                 <SelectContent
@@ -681,7 +681,7 @@ export function DataTable<T extends object>({
                 <button
                   key={p}
                   onClick={() => setPage(p as number)}
-                  className={`min-w-[36px] h-9 px-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                  className={`min-w-9 h-9 px-2 rounded-md text-sm font-medium transition-all duration-200 ${
                     safePage === p
                       ? 'bg-primary text-primary-foreground shadow-sm scale-105'
                       : 'border border-input text-muted-foreground hover:bg-muted hover:text-accent-foreground hover:border-accent-foreground/20'

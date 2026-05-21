@@ -23,15 +23,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
-import { toast } from 'sonner' // Gunakan sonner untuk feedback yang lebih bagus
+import { toast } from 'sonner'
 
 type ShareDropdownProps = {
   title: string
-  url?: string // Opsional, default ke window.location jika tidak diisi
+  url?: string
 }
 
 const ShareDropdown: React.FC<ShareDropdownProps> = ({ title, url }) => {
-  // Ambil URL saat ini jika props url kosong (client-side only)
   const currentUrl = url || (typeof window !== 'undefined' ? window.location.href : '')
 
   const handleCopyLink = async () => {

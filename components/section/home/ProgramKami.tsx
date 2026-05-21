@@ -12,7 +12,7 @@ export default function ProgramKami() {
       <div className="container mx-auto flex flex-col lg:flex-row gap-8 px-4 py-14 md:py-20">
         {/* Image */}
         <div className="flex-1 flex justify-center items-center">
-          <div className="relative w-[260px] h-[260px] sm:w-[360px] sm:h-[360px] lg:w-[460px] lg:h-[460px]">
+          <div className="relative w-65 h-65 sm:w-90 sm:h-90 lg:w-115 lg:h-115">
             <Image
               src="/images/hero-2.svg"
               alt="Hero Image"

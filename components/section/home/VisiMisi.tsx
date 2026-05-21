@@ -34,7 +34,7 @@ export default function VisiMisi() {
     <section className="relative w-full py-14 md:py-20 overflow-hidden bg-background text-foreground transition-colors duration-300">
       {/* Background */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/80 to-background/95 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-linear-to-b from-background/95 via-background/80 to-background/95 backdrop-blur-[2px]" />
       </div>
 
       <div className="container relative z-10 mx-auto px-4">
@@ -121,7 +121,7 @@ export default function VisiMisi() {
       </div>
 
       {/* Dekorasi */}
-      <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-accent to-transparent opacity-50" />
+      <div className="absolute bottom-0 left-0 w-full h-px bg-linear-to-r from-transparent via-accent to-transparent opacity-50" />
     </section>
   )
 }

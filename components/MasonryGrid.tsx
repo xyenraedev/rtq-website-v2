@@ -5,10 +5,9 @@ import Image from 'next/image'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useResizeObserver } from '@wojtekmaj/react-hooks'
 
-// Interface disesuaikan dengan GaleriImage dari useGaleri
 interface ImageData {
   id: string
-  image_url: string // Update dari image ke image_url
+  image_url: string
   galeri_nama: string
   width: number | null
   height: number | null
@@ -48,7 +47,7 @@ const MasonryGrid = ({ images }: { images: ImageData[] }) => {
   }, [images, columnCount])
 
   return (
-    <div ref={gridRef} className="w-full min-h-[200px]">
+    <div ref={gridRef} className="w-full min-h-50">
       <div
         className="grid gap-6 items-start"
         style={{
@@ -71,7 +70,6 @@ const MasonryGrid = ({ images }: { images: ImageData[] }) => {
 }
 
 const GridItem = ({ image }: { image: ImageData }) => {
-  // Fallback aspect ratio jika width/height null
   const aspectRatio = image.width && image.height ? image.width / image.height : 1
 
   return (
@@ -88,15 +86,15 @@ const GridItem = ({ image }: { image: ImageData }) => {
       }}
     >
       <Image
-        src={image.image_url} // Update dari image ke image_url
+        src={image.image_url}
         alt={image.galeri_nama}
         fill
         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
         className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
         loading="lazy"
-        unoptimized // Tambahkan ini jika gambar dari Supabase tidak muncul karena proteksi optimasi
+        unoptimized
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <div className="absolute inset-0 bg-linear-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       <div className="absolute inset-0 flex flex-col justify-end p-5 translate-y-4 group-hover:translate-y-0 opacity-0 group-hover:opacity-100 transition-all duration-300">
         <h3 className="text-white font-bold text-sm md:text-base leading-tight line-clamp-2">
           {image.galeri_nama}

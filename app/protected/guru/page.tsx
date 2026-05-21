@@ -104,7 +104,7 @@ function StatCard({
             {label}
           </p>
 
-          <p className="text-2xl font-bold text-foreground leading-tight break-words">{value}</p>
+          <p className="text-2xl font-bold text-foreground leading-tight wrap-break-word">{value}</p>
 
           <p className="text-xs text-muted-foreground">{sub}</p>
         </div>
@@ -141,7 +141,7 @@ function StatCard({
               {label}
             </p>
 
-            <p className="text-lg font-bold text-foreground leading-tight break-words">{value}</p>
+            <p className="text-lg font-bold text-foreground leading-tight wrap-break-word">{value}</p>
           </div>
         </div>
 
