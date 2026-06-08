@@ -48,6 +48,7 @@ import {
   fetchStatistikRekomendasi,
   reklasifikasiSemua,
 } from '@/lib/ml-services/hasil-rekomendasi'
+import { createClient } from '@/lib/supabase/client'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -340,6 +341,23 @@ export default function HasilRekomendasiPage() {
   const [sortDir, setSortDir] = useState<SortDir>(null)
   const [detailRow, setDetailRow] = useState<RekomendasiRow | null>(null)
   const [confirmReklas, setConfirmReklas] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
+
+  const isAdmin = role === 'admin'
+
+  useEffect(() => {
+    async function loadRole() {
+      const supabase = createClient()
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      setRole(user?.app_metadata?.role ?? null)
+    }
+
+    loadRole()
+  }, [])
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
@@ -413,15 +431,23 @@ export default function HasilRekomendasiPage() {
   // ── Reklasifikasi ──────────────────────────────────────────────────────────
 
   async function handleReklasifikasiSemua() {
+    if (!isAdmin) {
+      toast.error('Anda tidak memiliki akses')
+      return
+    }
+
     setConfirmReklas(false)
     setReklasLoading(true)
+
     try {
       const { berhasil, gagal } = await reklasifikasiSemua()
+
       if (berhasil === 0 && gagal === 0) {
         toast.info('Tidak ada santri yang ditemukan')
       } else {
         toast.success(`Reklasifikasi selesai: ${berhasil} berhasil, ${gagal} gagal`)
       }
+
       await loadData()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Gagal reklasifikasi')
@@ -622,18 +648,20 @@ export default function HasilRekomendasiPage() {
               <IconDownload size={15} />
               Ekspor Excel
             </button>
-            <button
-              onClick={() => setConfirmReklas(true)}
-              disabled={reklasLoading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {reklasLoading ? (
-                <IconRefresh size={15} className="animate-spin" />
-              ) : (
-                <IconBrain size={15} />
-              )}
-              Jalankan Ulang Klasifikasi
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setConfirmReklas(true)}
+                disabled={reklasLoading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {reklasLoading ? (
+                  <IconRefresh size={15} className="animate-spin" />
+                ) : (
+                  <IconBrain size={15} />
+                )}
+                Jalankan Ulang Klasifikasi
+              </button>
+            )}
           </div>
         </div>
 
@@ -953,7 +981,7 @@ export default function HasilRekomendasiPage() {
 
       {/* ── Modals ──────────────────────────────────────────────────────── */}
 
-      {confirmReklas && (
+      {isAdmin && confirmReklas && (
         <ConfirmModal
           title="Jalankan Ulang Klasifikasi?"
           description="Proses ini akan mengklasifikasi ulang semua santri aktif menggunakan model Decision Tree. Data rekomendasi sebelumnya akan diperbarui."

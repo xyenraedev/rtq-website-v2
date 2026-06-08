@@ -14,7 +14,6 @@ import {
   IconBriefcase,
   IconCalendar,
   IconUser,
-  IconFilter,
 } from '@tabler/icons-react'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
@@ -22,19 +21,16 @@ import { toast } from 'sonner'
 import Image from 'next/image'
 
 import { fetchGuru, deleteBulkGuru, type Guru } from '@/lib/guru'
+import { createClient } from '@/lib/supabase/client'
 
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { ModalEditGuru } from '@/components/protected/guru/modal-edit-guru'
 import { ModalHapusGuru } from '@/components/protected/guru/modal-hapus-guru'
 import { ModalTambahGuru } from '@/components/protected/guru/modal-tambah-guru'
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
-
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
-
-// ─── Avatar Cell ──────────────────────────────────────────────────────────────
 
 function AvatarCell({ src, name }: { src: string | null; name: string | null }) {
   const [error, setError] = useState(false)
@@ -64,8 +60,6 @@ function AvatarCell({ src, name }: { src: string | null; name: string | null }) 
     </div>
   )
 }
-
-// ─── StatCard ─────────────────────────────────────────────────────────────────
 
 function StatCard({
   icon,
@@ -104,7 +98,9 @@ function StatCard({
             {label}
           </p>
 
-          <p className="text-2xl font-bold text-foreground leading-tight wrap-break-word">{value}</p>
+          <p className="text-2xl font-bold text-foreground leading-tight wrap-break-word">
+            {value}
+          </p>
 
           <p className="text-xs text-muted-foreground">{sub}</p>
         </div>
@@ -118,7 +114,6 @@ function StatCard({
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 mt-1 ${ctaStyles[ctaVariant]}`}
           >
             {ctaLabel}
-
             <IconChevronRight
               size={14}
               className="opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
@@ -127,7 +122,6 @@ function StatCard({
         )}
       </div>
 
-      {/* Mobile */}
       <div className="flex sm:hidden flex-col gap-3">
         <div className="flex items-start gap-3">
           <div
@@ -141,7 +135,9 @@ function StatCard({
               {label}
             </p>
 
-            <p className="text-lg font-bold text-foreground leading-tight wrap-break-word">{value}</p>
+            <p className="text-lg font-bold text-foreground leading-tight wrap-break-word">
+              {value}
+            </p>
           </div>
         </div>
 
@@ -166,33 +162,31 @@ function StatCard({
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export default function GuruPage() {
   const [gurus, setGurus] = useState<Guru[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Filter jabatan
-  const [filterJabatan, setFilterJabatan] = useState<string>('all')
+  const [isAdmin, setIsAdmin] = useState(false)
 
-  // Modals
   const [modalTambahOpen, setModalTambahOpen] = useState(false)
   const [editGuru, setEditGuru] = useState<Guru | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Guru | null>(null)
-
-  // ── Load ────────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const role = user?.app_metadata?.role ?? null
+      setIsAdmin(role === 'admin')
+
       const list = await fetchGuru()
-
-      // Urutkan berdasarkan ID terkecil → terbesar
       const sorted = [...list].sort((a, b) => a.id - b.id)
-
       setGurus(sorted)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Gagal memuat data')
@@ -205,27 +199,12 @@ export default function GuruPage() {
     loadData()
   }, [loadData])
 
-  // ── Stats ───────────────────────────────────────────────────────────────────
-
   const totalGuru = gurus.length
   const guruWithFoto = gurus.filter((g) => g.image_url).length
   const guruWithJabatan = gurus.filter((g) => g.jabatan).length
-
-  // Unique jabatan list
   const jabatanList = Array.from(
     new Set(gurus.map((g) => g.jabatan).filter(Boolean) as string[])
   ).sort()
-
-  // ── Filtered Data ───────────────────────────────────────────────────────────
-
-  const filteredGurus =
-    filterJabatan === 'all'
-      ? gurus
-      : filterJabatan === 'no-jabatan'
-        ? gurus.filter((g) => !g.jabatan)
-        : gurus.filter((g) => g.jabatan === filterJabatan)
-
-  // ── Handlers ────────────────────────────────────────────────────────────────
 
   function handleSave(guru: Guru) {
     setGurus((prev) => [...prev, guru].sort((a, b) => a.id - b.id))
@@ -246,12 +225,7 @@ export default function GuruPage() {
     try {
       const selected = gurus.filter((g) => keys.includes(g.id))
 
-      await deleteBulkGuru(
-        selected.map((g) => ({
-          id: g.id,
-          imageUrl: g.image_url,
-        }))
-      )
+      await deleteBulkGuru(selected.map((g) => ({ id: g.id, imageUrl: g.image_url })))
 
       setGurus((prev) => prev.filter((g) => !keys.includes(g.id)))
 
@@ -262,8 +236,6 @@ export default function GuruPage() {
       })
     }
   }
-
-  // ── Columns ─────────────────────────────────────────────────────────────────
 
   const columns: ColumnDef<Guru>[] = [
     {
@@ -298,21 +270,16 @@ export default function GuruPage() {
       key: 'created_at',
       header: 'Tgl Dibuat',
       sortable: true,
-      cell: (row) => {
-        const date = new Date(row.created_at)
-
-        return (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-            <IconCalendar size={12} />
-
-            {date.toLocaleDateString('id-ID', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </span>
-        )
-      },
+      cell: (row) => (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+          <IconCalendar size={12} />
+          {new Date(row.created_at).toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          })}
+        </span>
+      ),
     },
 
     {
@@ -324,13 +291,10 @@ export default function GuruPage() {
           return <span className="text-xs text-muted-foreground italic">—</span>
         }
 
-        const date = new Date(row.updated_at)
-
         return (
           <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
             <IconCalendar size={12} />
-
-            {date.toLocaleDateString('id-ID', {
+            {new Date(row.updated_at).toLocaleDateString('id-ID', {
               day: 'numeric',
               month: 'short',
               year: 'numeric',
@@ -340,40 +304,41 @@ export default function GuruPage() {
       },
     },
 
-    {
-      key: 'aksi',
-      header: 'Aksi',
-      align: 'center',
-      cell: (row) => (
-        <div
-          className="flex items-center justify-center gap-1.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setEditGuru(row)}
-            className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-            title="Edit"
-          >
-            <IconEdit size={15} />
-          </button>
+    ...(isAdmin
+      ? [
+          {
+            key: 'aksi' as keyof Guru,
+            header: 'Aksi',
+            align: 'center' as const,
+            cell: (row: Guru) => (
+              <div
+                className="flex items-center justify-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setEditGuru(row)}
+                  className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                  title="Edit"
+                >
+                  <IconEdit size={15} />
+                </button>
 
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-            title="Hapus"
-          >
-            <IconTrash size={15} />
-          </button>
-        </div>
-      ),
-    },
+                <button
+                  onClick={() => setDeleteTarget(row)}
+                  className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Hapus"
+                >
+                  <IconTrash size={15} />
+                </button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ]
-
-  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background p-3 sm:p-6">
-      {/* Header */}
       <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2.5 mb-1">
@@ -399,19 +364,20 @@ export default function GuruPage() {
             Refresh
           </button>
 
-          <button
-            onClick={() => setModalTambahOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
-          >
-            <IconPlus size={17} />
-            Tambah Guru
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setModalTambahOpen(true)}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
+            >
+              <IconPlus size={17} />
+              Tambah Guru
+            </button>
+          )}
         </div>
       </div>
 
       <hr className="my-4" />
 
-      {/* Error */}
       {error && (
         <div className="mb-6 flex items-center gap-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl px-4 py-3">
           <IconAlertCircle size={18} className="shrink-0" />
@@ -424,7 +390,6 @@ export default function GuruPage() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatCard
           icon={
@@ -465,7 +430,6 @@ export default function GuruPage() {
         />
       </div>
 
-      {/* Table */}
       {loading && gurus.length === 0 ? (
         <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
           <IconLoader2 size={20} className="animate-spin" />
@@ -474,49 +438,51 @@ export default function GuruPage() {
         </div>
       ) : (
         <DataTable<Guru>
-          data={filteredGurus}
+          data={gurus}
           columns={columns}
           rowKey="id"
           pageSize={10}
           defaultSort={{ key: 'id', direction: 'asc' }}
           searchFields={['nama', 'jabatan']}
           searchPlaceholder="Cari guru berdasarkan nama atau jabatan..."
-          selectable
-          onBulkDelete={(keys) => handleBulkDelete(keys as number[])}
+          selectable={isAdmin}
+          onBulkDelete={isAdmin ? (keys) => handleBulkDelete(keys as number[]) : undefined}
           emptyMessage="Tidak ada data guru ditemukan."
           toolbarExtra={
             <span className="text-xs text-muted-foreground">
-              Menampilkan{' '}
-              <span className="font-semibold text-foreground">{filteredGurus.length}</span> dari{' '}
+              Menampilkan <span className="font-semibold text-foreground">{gurus.length}</span> dari{' '}
               <span className="font-semibold text-foreground">{totalGuru}</span> guru
             </span>
           }
         />
       )}
 
-      {/* Modals */}
-      <ModalTambahGuru
-        open={modalTambahOpen}
-        onClose={() => setModalTambahOpen(false)}
-        onSave={handleSave}
-      />
+      {isAdmin && (
+        <>
+          <ModalTambahGuru
+            open={modalTambahOpen}
+            onClose={() => setModalTambahOpen(false)}
+            onSave={handleSave}
+          />
 
-      {editGuru && (
-        <ModalEditGuru
-          open={!!editGuru}
-          onClose={() => setEditGuru(null)}
-          guru={editGuru}
-          onUpdate={handleUpdate}
-        />
-      )}
+          {editGuru && (
+            <ModalEditGuru
+              open={!!editGuru}
+              onClose={() => setEditGuru(null)}
+              guru={editGuru}
+              onUpdate={handleUpdate}
+            />
+          )}
 
-      {deleteTarget && (
-        <ModalHapusGuru
-          open={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          guru={deleteTarget}
-          onDeleted={handleDeleted}
-        />
+          {deleteTarget && (
+            <ModalHapusGuru
+              open={!!deleteTarget}
+              onClose={() => setDeleteTarget(null)}
+              guru={deleteTarget}
+              onDeleted={handleDeleted}
+            />
+          )}
+        </>
       )}
     </div>
   )

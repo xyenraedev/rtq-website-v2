@@ -29,19 +29,13 @@ import { ModalTambahGaleriKategori } from '@/components/protected/galeri-kategor
 import { ModalEditGaleriKategori } from '@/components/protected/galeri-kategori/modal-edit-kategori'
 import { ModalHapusGaleriKategori } from '@/components/protected/galeri-kategori/modal-hapus-kategori'
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
-
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface GaleriKategoriWithCount extends GaleriKategori {
   galeriCount: number
 }
-
-// ─── Galeri fetcher (count per kategori) ─────────────────────────────────────
 
 async function fetchGaleriCountPerKategori(): Promise<Record<string, number>> {
   const supabase = createClient()
@@ -59,8 +53,6 @@ async function fetchGaleriCountPerKategori(): Promise<Record<string, number>> {
   return countMap
 }
 
-// ─── StatCard ─────────────────────────────────────────────────────────────────
-
 function StatCard({
   icon,
   label,
@@ -76,7 +68,6 @@ function StatCard({
 }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-      {/* Desktop */}
       <div className="hidden sm:flex items-start gap-4">
         <div className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${accent}`}>
           {icon}
@@ -87,7 +78,6 @@ function StatCard({
             {label}
           </p>
 
-          {/* tinggi konsisten */}
           <div className="h-8 flex items-center">
             <p
               className={cn(
@@ -104,7 +94,6 @@ function StatCard({
         </div>
       </div>
 
-      {/* Mobile */}
       <div className="flex sm:hidden flex-col gap-3">
         <div className="flex items-start gap-3">
           <div
@@ -138,23 +127,28 @@ function StatCard({
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 export default function GaleriKategoriPage() {
   const [kategoris, setKategoris] = useState<GaleriKategoriWithCount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [isAdmin, setIsAdmin] = useState(false)
+
   const [modalTambahOpen, setModalTambahOpen] = useState(false)
   const [editKategori, setEditKategori] = useState<GaleriKategoriWithCount | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<GaleriKategoriWithCount | null>(null)
-
-  // ── Load ───────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const role = user?.app_metadata?.role ?? null
+      setIsAdmin(role === 'admin')
+
       const [kategoriList, countMap] = await Promise.all([
         fetchGaleriKategori(),
         fetchGaleriCountPerKategori(),
@@ -177,13 +171,9 @@ export default function GaleriKategoriPage() {
     loadData()
   }, [loadData])
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-
   const totalGaleri = kategoris.reduce((a, k) => a + k.galeriCount, 0)
   const kategoriTerpakai = kategoris.filter((k) => k.galeriCount > 0).length
   const kategoriTerbanyak = [...kategoris].sort((a, b) => b.galeriCount - a.galeriCount)[0]
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
 
   function handleSave(kategori: GaleriKategori) {
     setKategoris((prev) => [{ ...kategori, galeriCount: 0 }, ...prev])
@@ -209,8 +199,6 @@ export default function GaleriKategoriPage() {
       })
     }
   }
-
-  // ── Columns ────────────────────────────────────────────────────────────────
 
   const columns: ColumnDef<GaleriKategoriWithCount>[] = [
     {
@@ -254,21 +242,19 @@ export default function GaleriKategoriPage() {
       key: 'galeriCount',
       header: 'Jumlah Foto',
       sortable: true,
-      cell: (row) => {
-        return (
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
-              <IconTag size={11} className="mr-1.5 text-muted-foreground" />
-              {row.nama}
-            </span>
+      cell: (row) => (
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
+            <IconTag size={11} className="mr-1.5 text-muted-foreground" />
+            {row.nama}
+          </span>
 
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <IconBadge size={13} />
-              {row.galeriCount} foto
-            </span>
-          </div>
-        )
-      },
+          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+            <IconBadge size={13} />
+            {row.galeriCount} foto
+          </span>
+        </div>
+      ),
     },
     {
       key: 'proporsi',
@@ -292,39 +278,40 @@ export default function GaleriKategoriPage() {
         )
       },
     },
-    {
-      key: 'aksi',
-      header: 'Aksi',
-      align: 'center',
-      cell: (row) => (
-        <div
-          className="flex items-center justify-center gap-1.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setEditKategori(row)}
-            className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-            title="Edit"
-          >
-            <IconEdit size={15} />
-          </button>
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-            title="Hapus"
-          >
-            <IconTrash size={15} />
-          </button>
-        </div>
-      ),
-    },
+    ...(isAdmin
+      ? [
+          {
+            key: 'aksi' as keyof GaleriKategoriWithCount,
+            header: 'Aksi',
+            align: 'center' as const,
+            cell: (row: GaleriKategoriWithCount) => (
+              <div
+                className="flex items-center justify-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setEditKategori(row)}
+                  className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                  title="Edit"
+                >
+                  <IconEdit size={15} />
+                </button>
+                <button
+                  onClick={() => setDeleteTarget(row)}
+                  className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Hapus"
+                >
+                  <IconTrash size={15} />
+                </button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ]
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background p-3 sm:p-6">
-      {/* Header */}
       <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2.5 mb-1">
@@ -346,19 +333,21 @@ export default function GaleriKategoriPage() {
             <IconRefresh size={16} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
-          <button
-            onClick={() => setModalTambahOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
-          >
-            <IconPlus size={17} />
-            Tambah Kategori
-          </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => setModalTambahOpen(true)}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
+            >
+              <IconPlus size={17} />
+              Tambah Kategori
+            </button>
+          )}
         </div>
       </div>
 
       <hr className="my-4" />
 
-      {/* Error */}
       {error && (
         <div className="mb-6 flex items-center gap-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl px-4 py-3">
           <IconAlertCircle size={18} className="shrink-0" />
@@ -369,7 +358,6 @@ export default function GaleriKategoriPage() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatCard
           icon={
@@ -413,7 +401,6 @@ export default function GaleriKategoriPage() {
         />
       </div>
 
-      {/* Table */}
       {loading && kategoris.length === 0 ? (
         <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
           <IconLoader2 size={20} className="animate-spin" />
@@ -428,8 +415,8 @@ export default function GaleriKategoriPage() {
           defaultSort={{ key: 'galeriCount', direction: 'desc' }}
           searchFields={['nama']}
           searchPlaceholder="Cari kategori galeri..."
-          selectable
-          onBulkDelete={(keys) => handleBulkDelete(keys as string[])}
+          selectable={isAdmin}
+          onBulkDelete={isAdmin ? (keys) => handleBulkDelete(keys as string[]) : undefined}
           emptyMessage="Tidak ada kategori galeri ditemukan."
           toolbarExtra={
             <span className="text-xs text-muted-foreground">
@@ -440,30 +427,33 @@ export default function GaleriKategoriPage() {
         />
       )}
 
-      {/* Modals */}
-      <ModalTambahGaleriKategori
-        open={modalTambahOpen}
-        onClose={() => setModalTambahOpen(false)}
-        onSave={handleSave}
-      />
+      {isAdmin && (
+        <>
+          <ModalTambahGaleriKategori
+            open={modalTambahOpen}
+            onClose={() => setModalTambahOpen(false)}
+            onSave={handleSave}
+          />
 
-      {editKategori && (
-        <ModalEditGaleriKategori
-          open={!!editKategori}
-          onClose={() => setEditKategori(null)}
-          kategori={editKategori}
-          onUpdate={handleUpdate}
-        />
-      )}
+          {editKategori && (
+            <ModalEditGaleriKategori
+              open={!!editKategori}
+              onClose={() => setEditKategori(null)}
+              kategori={editKategori}
+              onUpdate={handleUpdate}
+            />
+          )}
 
-      {deleteTarget && (
-        <ModalHapusGaleriKategori
-          open={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          kategori={deleteTarget}
-          galeriCount={deleteTarget.galeriCount}
-          onDeleted={handleDeleted}
-        />
+          {deleteTarget && (
+            <ModalHapusGaleriKategori
+              open={!!deleteTarget}
+              onClose={() => setDeleteTarget(null)}
+              kategori={deleteTarget}
+              galeriCount={deleteTarget.galeriCount}
+              onDeleted={handleDeleted}
+            />
+          )}
+        </>
       )}
     </div>
   )

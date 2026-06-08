@@ -9,12 +9,10 @@ import {
   IconLoader2,
   IconAlertCircle,
   IconRefresh,
-  IconChevronRight,
   IconLayoutGrid,
   IconTag,
   IconDimensions,
   IconCalendar,
-  IconFilter,
   IconStack2,
 } from '@tabler/icons-react'
 import { clsx, type ClassValue } from 'clsx'
@@ -32,6 +30,7 @@ import { DataTable, type ColumnDef } from '@/components/data-table'
 import { ModalEditGaleri } from '@/components/protected/galeri/modal-edit-galeri'
 import { ModalHapusGaleri } from '@/components/protected/galeri/modal-hapus-galeri'
 import { ModalTambahGaleri } from '@/components/protected/galeri/modal-tambah-galeri'
+import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 
 function cn(...inputs: ClassValue[]) {
@@ -116,12 +115,10 @@ export default function GaleriPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const [filterKategori, setFilterKategori] = useState('all')
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const [modalTambahOpen, setModalTambahOpen] = useState(false)
-
   const [editGaleri, setEditGaleri] = useState<GaleriWithKategori | null>(null)
-
   const [deleteTarget, setDeleteTarget] = useState<GaleriWithKategori | null>(null)
 
   const loadData = useCallback(async () => {
@@ -129,6 +126,13 @@ export default function GaleriPage() {
     setError(null)
 
     try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const role = user?.app_metadata?.role ?? null
+      setIsAdmin(role === 'admin')
+
       const [galeriList, kategoriList] = await Promise.all([fetchGaleri(), fetchGaleriKategori()])
 
       setGaleris(galeriList)
@@ -144,28 +148,12 @@ export default function GaleriPage() {
     loadData()
   }, [loadData])
 
-  // ─── Statistik ────────────────────────────────────────────────────────────
-
   const totalAlbum = galeris.length
-
   const totalFoto = galeris.reduce((acc, item) => acc + item.images.length, 0)
-
   const albumBerkategori = galeris.filter((g) => g.galeri_kategori_id !== null).length
-
   const totalFotoBerdimensi = galeris.reduce((acc, item) => {
     return acc + item.images.filter((img) => img.width && img.height).length
   }, 0)
-
-  // ─── Filter ───────────────────────────────────────────────────────────────
-
-  const filteredGaleris =
-    filterKategori === 'all'
-      ? galeris
-      : filterKategori === 'uncategorized'
-        ? galeris.filter((g) => !g.galeri_kategori_id)
-        : galeris.filter((g) => g.galeri_kategori_id === filterKategori)
-
-  // ─── Handlers ─────────────────────────────────────────────────────────────
 
   function handleSave(galeri: GaleriWithKategori) {
     setGaleris((prev) => [galeri, ...prev])
@@ -177,17 +165,13 @@ export default function GaleriPage() {
 
   function handleDeleted(id: string) {
     setGaleris((prev) => prev.filter((g) => g.id !== id))
-
     setDeleteTarget(null)
   }
 
   async function handleBulkDelete(keys: string[]) {
     const items = galeris
       .filter((g) => keys.includes(g.id))
-      .map((g) => ({
-        id: g.id,
-        images: g.images,
-      }))
+      .map((g) => ({ id: g.id, images: g.images }))
 
     try {
       await deleteBulkGaleri(items)
@@ -203,8 +187,6 @@ export default function GaleriPage() {
       })
     }
   }
-
-  // ─── Columns ──────────────────────────────────────────────────────────────
 
   const columns: ColumnDef<GaleriWithKategori>[] = [
     {
@@ -269,7 +251,6 @@ export default function GaleriPage() {
       header: 'Dimensi',
       cell: (row) => {
         const first = row.images?.[0]
-
         const dim = formatDimensions(first?.width ?? null, first?.height ?? null)
 
         return (
@@ -299,7 +280,6 @@ export default function GaleriPage() {
         return (
           <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
             <IconCalendar size={12} />
-
             {new Date(row.created_at).toLocaleDateString('id-ID', {
               day: 'numeric',
               month: 'short',
@@ -310,34 +290,37 @@ export default function GaleriPage() {
       },
     },
 
-    {
-      key: 'aksi',
-      header: 'Aksi',
-      align: 'center',
+    ...(isAdmin
+      ? [
+          {
+            key: 'aksi' as keyof GaleriWithKategori,
+            header: 'Aksi',
+            align: 'center' as const,
+            cell: (row: GaleriWithKategori) => (
+              <div
+                className="flex items-center justify-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setEditGaleri(row)}
+                  className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                  title="Edit"
+                >
+                  <IconEdit size={15} />
+                </button>
 
-      cell: (row) => (
-        <div
-          className="flex items-center justify-center gap-1.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setEditGaleri(row)}
-            className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-            title="Edit"
-          >
-            <IconEdit size={15} />
-          </button>
-
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-            title="Hapus"
-          >
-            <IconTrash size={15} />
-          </button>
-        </div>
-      ),
-    },
+                <button
+                  onClick={() => setDeleteTarget(row)}
+                  className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Hapus"
+                >
+                  <IconTrash size={15} />
+                </button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -365,13 +348,15 @@ export default function GaleriPage() {
             Refresh
           </button>
 
-          <button
-            onClick={() => setModalTambahOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
-          >
-            <IconPlus size={17} />
-            Tambah Album
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setModalTambahOpen(true)}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
+            >
+              <IconPlus size={17} />
+              Tambah Album
+            </button>
+          )}
         </div>
       </div>
 
@@ -426,45 +411,46 @@ export default function GaleriPage() {
       </div>
 
       <DataTable<GaleriWithKategori>
-        data={filteredGaleris}
+        data={galeris}
         columns={columns}
         rowKey="id"
         pageSize={10}
-        defaultSort={{
-          key: 'created_at',
-          direction: 'desc',
-        }}
+        defaultSort={{ key: 'created_at', direction: 'desc' }}
         searchFields={['judul', 'deskripsi']}
         searchPlaceholder="Cari album..."
-        selectable
-        onBulkDelete={(keys) => handleBulkDelete(keys as string[])}
+        selectable={isAdmin}
+        onBulkDelete={isAdmin ? (keys) => handleBulkDelete(keys as string[]) : undefined}
         emptyMessage="Tidak ada album ditemukan."
       />
 
-      <ModalTambahGaleri
-        open={modalTambahOpen}
-        onClose={() => setModalTambahOpen(false)}
-        onSave={handleSave}
-        kategoris={kategoris}
-      />
+      {isAdmin && (
+        <>
+          <ModalTambahGaleri
+            open={modalTambahOpen}
+            onClose={() => setModalTambahOpen(false)}
+            onSave={handleSave}
+            kategoris={kategoris}
+          />
 
-      {editGaleri && (
-        <ModalEditGaleri
-          open={!!editGaleri}
-          onClose={() => setEditGaleri(null)}
-          galeri={editGaleri}
-          onUpdate={handleUpdate}
-          kategoris={kategoris}
-        />
-      )}
+          {editGaleri && (
+            <ModalEditGaleri
+              open={!!editGaleri}
+              onClose={() => setEditGaleri(null)}
+              galeri={editGaleri}
+              onUpdate={handleUpdate}
+              kategoris={kategoris}
+            />
+          )}
 
-      {deleteTarget && (
-        <ModalHapusGaleri
-          open={!!deleteTarget}
-          onClose={() => setDeleteTarget(null)}
-          galeri={deleteTarget}
-          onDeleted={handleDeleted}
-        />
+          {deleteTarget && (
+            <ModalHapusGaleri
+              open={!!deleteTarget}
+              onClose={() => setDeleteTarget(null)}
+              galeri={deleteTarget}
+              onDeleted={handleDeleted}
+            />
+          )}
+        </>
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import {
   IconUsers,
@@ -9,25 +9,20 @@ import {
   IconRefresh,
   IconTrash,
   IconEdit,
-  IconSearch,
-  IconX,
   IconCheck,
   IconAlertTriangle,
   IconEye,
   IconBookmark,
   IconTrendingUp,
-  IconChevronUp,
-  IconChevronDown,
-  IconSelector,
   IconAlertCircle,
   IconCalendar,
   IconMapPin,
   IconBrain,
   IconClock,
   IconRotateClockwise,
-  IconFilter,
   IconStepInto,
   IconHistory,
+  IconX,
 } from '@tabler/icons-react'
 import {
   fetchSantriList,
@@ -46,17 +41,9 @@ import type {
   SantriProgress,
 } from '@/lib/types'
 import { useRouter, useSearchParams } from 'next/navigation'
-
-// ─── Constants & Types ────────────────────────────────────────────────────────
-
-type SortField =
-  | 'nama'
-  | 'jilid_saat_ini'
-  | 'total_pengulangan_taskih'
-  | 'status_rekomendasi'
-  | 'created_at'
-
-type SortDir = 'asc' | 'desc' | null
+import { createClient } from '@/lib/supabase/client'
+import { DataTable, type ColumnDef } from '@/components/data-table'
+import { useRef } from 'react'
 
 type DurasiKey =
   | 'durasi_jilid_0'
@@ -66,16 +53,6 @@ type DurasiKey =
   | 'durasi_jilid_4'
   | 'durasi_jilid_5'
   | 'durasi_jilid_6'
-
-const DURASI_KEYS: DurasiKey[] = [
-  'durasi_jilid_0',
-  'durasi_jilid_1',
-  'durasi_jilid_2',
-  'durasi_jilid_3',
-  'durasi_jilid_4',
-  'durasi_jilid_5',
-  'durasi_jilid_6',
-]
 
 const EMPTY_FORM: SantriFormData = {
   nama: '',
@@ -125,8 +102,6 @@ function santriToForm(s: SantriDenganRekomendasi): SantriFormData {
   }
 }
 
-// ─── Shared Sub-components ────────────────────────────────────────────────────
-
 function StatusBadge({ status }: { status: 'BBK' | 'TBBK' | null }) {
   if (!status)
     return (
@@ -171,23 +146,6 @@ function StatCard({
     </div>
   )
 }
-
-function SortIcon({
-  col,
-  sortKey,
-  sortDir,
-}: {
-  col: SortField
-  sortKey: SortField | null
-  sortDir: SortDir
-}) {
-  if (sortKey !== col) return <IconSelector size={13} className="text-muted-foreground/40" />
-  if (sortDir === 'asc') return <IconChevronUp size={13} className="text-primary" />
-  if (sortDir === 'desc') return <IconChevronDown size={13} className="text-primary" />
-  return <IconSelector size={13} className="text-muted-foreground/40" />
-}
-
-// ─── Confirm Modal ────────────────────────────────────────────────────────────
 
 function ConfirmModal({
   title,
@@ -248,8 +206,6 @@ function ConfirmModal({
   )
 }
 
-// ─── Form Modal ───────────────────────────────────────────────────────────────
-
 function SantriForm({
   initial,
   progressList,
@@ -268,7 +224,6 @@ function SantriForm({
 
   const jilid = Number(form.jilid_saat_ini)
 
-  // Build a map from progress records so we can pre-fill historical jilid durations
   const progressByJilid: Record<number, SantriProgress> = {}
   for (const p of progressList ?? []) {
     progressByJilid[p.jilid] = p
@@ -317,7 +272,6 @@ function SantriForm({
       }}
     >
       <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-card z-10">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-primary/10 rounded-lg">
@@ -342,7 +296,6 @@ function SantriForm({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Section 1: Identitas */}
           <section>
             <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
               <span className="w-5 h-5 bg-primary/10 text-primary text-xs rounded-full flex items-center justify-center font-bold">
@@ -406,7 +359,6 @@ function SantriForm({
             </div>
           </section>
 
-          {/* Section 2: Capaian */}
           <section>
             <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
               <span className="w-5 h-5 bg-primary/10 text-primary text-xs rounded-full flex items-center justify-center font-bold">
@@ -414,37 +366,30 @@ function SantriForm({
               </span>
               Capaian Pembelajaran
             </h3>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                   Jilid Saat Ini <span className="text-red-500">*</span>
                 </label>
-
                 <select
                   name="jilid_saat_ini"
                   value={form.jilid_saat_ini}
                   onChange={(e) => {
                     const nextJilid = Number(e.target.value)
-
                     if (isEdit && initial) {
                       const currentJilid = initial.jilid_saat_ini
-
                       if (nextJilid < currentJilid) {
                         toast.error('Tidak boleh turun jilid')
                         return
                       }
-
                       if (nextJilid > currentJilid + 1) {
                         toast.error('Jilid harus naik satu per satu')
                         return
                       }
                     }
-
                     setForm((prev) => ({
                       ...prev,
                       jilid_saat_ini: nextJilid,
-
                       total_pengulangan_taskih: 0,
                     }))
                   }}
@@ -453,9 +398,7 @@ function SantriForm({
                   {[0, 1, 2, 3, 4, 5, 6, 7]
                     .filter((j) => {
                       if (!isEdit || !initial) return true
-
                       const currentJilid = initial.jilid_saat_ini
-
                       return j === currentJilid || j === currentJilid + 1
                     })
                     .map((j) => (
@@ -465,12 +408,10 @@ function SantriForm({
                     ))}
                 </select>
               </div>
-
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                   Pengulangan Taskih (Jilid Aktif)
                 </label>
-
                 <input
                   type="number"
                   name="total_pengulangan_taskih"
@@ -480,7 +421,6 @@ function SantriForm({
                   disabled={jilid === 7}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50"
                 />
-
                 {jilid === 7 && (
                   <p className="text-[11px] text-muted-foreground mt-1">
                     Al-Quran tidak memiliki taskih
@@ -490,7 +430,6 @@ function SantriForm({
             </div>
           </section>
 
-          {/* Section 3: Progress Jilid */}
           <section>
             <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
               <span className="w-5 h-5 bg-primary/10 text-primary text-xs rounded-full flex items-center justify-center font-bold">
@@ -498,21 +437,15 @@ function SantriForm({
               </span>
               Progress & Durasi per Jilid (bulan)
             </h3>
-
             <p className="text-xs text-muted-foreground mb-3 ml-7">
               Jilid yang sudah selesai hanya dapat dilihat. Yang dapat diedit hanya jilid aktif.
             </p>
-
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {Array.from({ length: jilid + 1 }, (_, j) => {
                 const fieldKey = `durasi_jilid_${j}` as DurasiKey
-
                 const isActive = j === jilid
                 const isCompleted = j < jilid
-
                 const progressRecord = progressByJilid[j]
-
-                // ambil data existing
                 const existingValue = progressRecord?.durasi_bulan ?? Number(form[fieldKey]) ?? ''
 
                 return (
@@ -538,18 +471,15 @@ function SantriForm({
                       >
                         {jilidLabel(j)}
                       </label>
-
                       {isActive && (
                         <span className="text-[9px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full font-bold">
                           AKTIF
                         </span>
                       )}
-
                       {isCompleted && (
                         <IconCheck size={12} className="text-emerald-600 dark:text-emerald-400" />
                       )}
                     </div>
-
                     <input
                       type="number"
                       name={fieldKey}
@@ -559,7 +489,6 @@ function SantriForm({
                       disabled
                       className="w-full px-2 py-1.5 rounded-lg border border-border bg-muted text-muted-foreground cursor-not-allowed text-sm"
                     />
-
                     {progressRecord && (
                       <div className="mt-2 space-y-0.5">
                         {progressRecord.tanggal_mulai && (
@@ -567,7 +496,6 @@ function SantriForm({
                             Mulai: {formatDate(progressRecord.tanggal_mulai)}
                           </p>
                         )}
-
                         {progressRecord.tanggal_selesai && (
                           <p className="text-[10px] text-muted-foreground">
                             Selesai: {formatDate(progressRecord.tanggal_selesai)}
@@ -579,7 +507,6 @@ function SantriForm({
                 )
               })}
             </div>
-
             {isEdit && progressList && progressList.some((p) => p.jilid > jilid) && (
               <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2">
                 <p className="text-xs text-amber-700 dark:text-amber-400">
@@ -591,7 +518,6 @@ function SantriForm({
             )}
           </section>
 
-          {/* Actions */}
           <div className="flex justify-end gap-3 pt-2 border-t border-border">
             <button
               type="button"
@@ -624,8 +550,6 @@ function SantriForm({
   )
 }
 
-// ─── Detail Modal ─────────────────────────────────────────────────────────────
-
 function DetailModal({
   santri,
   onClose,
@@ -657,15 +581,12 @@ function DetailModal({
       .finally(() => setLoadingDetail(false))
   }, [santri.id])
 
-  // Build progress map by jilid
   const progressByJilid: Record<number, SantriProgress> = {}
   for (const p of progressList) {
     progressByJilid[p.jilid] = p
   }
 
   const currentJilid = santri.jilid_saat_ini
-
-  // Jilid rows: 0 through currentJilid inclusive
   const jilidRows = Array.from({ length: currentJilid + 1 }, (_, i) => i)
 
   return (
@@ -677,7 +598,6 @@ function DetailModal({
       }}
     >
       <div className="bg-card border border-border rounded-2xl w-full max-w-xl max-h-[88vh] overflow-y-auto shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-card z-10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-sm">
@@ -685,16 +605,14 @@ function DetailModal({
             </div>
             <div>
               <h2 className="font-semibold text-foreground text-sm">{santri.nama}</h2>
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-xs text-muted-foreground">
-                  {jilidLabel(santri.jilid_saat_ini)} ·{' '}
-                  {santri.jenis_kelamin === 'L'
-                    ? 'Laki-laki'
-                    : santri.jenis_kelamin === 'P'
-                      ? 'Perempuan'
-                      : '—'}
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                {jilidLabel(santri.jilid_saat_ini)} ·{' '}
+                {santri.jenis_kelamin === 'L'
+                  ? 'Laki-laki'
+                  : santri.jenis_kelamin === 'P'
+                    ? 'Perempuan'
+                    : '—'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -706,7 +624,6 @@ function DetailModal({
         </div>
 
         <div className="p-5 space-y-5">
-          {/* Info grid */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-muted/40 px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
@@ -746,7 +663,6 @@ function DetailModal({
             </div>
           </div>
 
-          {/* Probabilitas bar */}
           {santri.probabilitas != null && (
             <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
               <div className="flex items-center justify-between mb-1.5">
@@ -768,13 +684,11 @@ function DetailModal({
             </div>
           )}
 
-          {/* ── Progress Jilid Table ─────────────────────────────────── */}
           <div>
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <IconBook size={13} />
               Riwayat Progres Jilid (0 — {jilidLabel(currentJilid)})
             </h3>
-
             {loadingDetail ? (
               <div className="space-y-2">
                 {jilidRows.map((i) => (
@@ -810,16 +724,13 @@ function DetailModal({
                     {jilidRows.map((j) => {
                       const prog = progressByJilid[j]
                       const isActive = j === currentJilid
-                      // Fallback to santri table durasi columns if progress not fetched yet
                       const durasiKey = `durasi_jilid_${j}` as DurasiKey
                       const durasi = prog?.durasi_bulan ?? (santri[durasiKey] as number | null)
 
                       return (
                         <tr
                           key={j}
-                          className={`transition-colors ${
-                            isActive ? 'bg-primary/5' : 'hover:bg-muted/30'
-                          }`}
+                          className={`transition-colors ${isActive ? 'bg-primary/5' : 'hover:bg-muted/30'}`}
                         >
                           <td className="px-3 py-2.5">
                             <div className="flex items-center gap-1.5">
@@ -879,7 +790,6 @@ function DetailModal({
             )}
           </div>
 
-          {/* Alasan keputusan */}
           {santri.alasan_rekomendasi && (
             <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -892,7 +802,6 @@ function DetailModal({
             </div>
           )}
 
-          {/* Riwayat klasifikasi */}
           {riwayat.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
@@ -939,7 +848,6 @@ function DetailModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="border-t border-border px-5 py-3">
           <button
             onClick={onClose}
@@ -953,8 +861,6 @@ function DetailModal({
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
 export default function MonitoringSantriPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -962,12 +868,9 @@ export default function MonitoringSantriPage() {
   const [santriList, setSantriList] = useState<SantriDenganRekomendasi[]>([])
   const [stats, setStats] = useState<MonitoringStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [filterJilid, setFilterJilid] = useState('')
-  const [sortField, setSortField] = useState<SortField | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>(null)
 
-  // Modals
+  const [isAdmin, setIsAdmin] = useState(false)
+
   const [showForm, setShowForm] = useState(false)
   const [editSantri, setEditSantri] = useState<SantriDenganRekomendasi | null>(null)
   const [editProgressList, setEditProgressList] = useState<SantriProgress[]>([])
@@ -975,11 +878,15 @@ export default function MonitoringSantriPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; nama: string } | null>(null)
   const [confirmReklas, setConfirmReklas] = useState<{ id: string; nama: string } | null>(null)
 
-  // ── Load ──────────────────────────────────────────────────────────────────
-
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      setIsAdmin(user?.app_metadata?.role === 'admin')
+
       const [list, statsData] = await Promise.all([fetchSantriList(), fetchMonitoringStats()])
       setSantriList(list)
       setStats(statsData)
@@ -994,17 +901,14 @@ export default function MonitoringSantriPage() {
     loadData()
   }, [loadData])
 
-  // Handle ?edit=<id> query param
   useEffect(() => {
     const editId = searchParams.get('edit')
-    if (!editId || santriList.length === 0) return
+    if (!editId || santriList.length === 0 || !isAdmin) return
     const target = santriList.find((s) => s.id === editId)
     if (!target) return
     openEdit(target)
     router.replace('/protected/monitoring-santri', { scroll: false })
-  }, [searchParams, santriList]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Edit helpers ──────────────────────────────────────────────────────────
+  }, [searchParams, santriList, isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function openEdit(santri: SantriDenganRekomendasi) {
     setEditSantri(santri)
@@ -1016,24 +920,6 @@ export default function MonitoringSantriPage() {
     }
     setShowForm(true)
   }
-
-  // ── Sort ──────────────────────────────────────────────────────────────────
-
-  function handleSort(field: SortField) {
-    if (sortField !== field) {
-      setSortField(field)
-      setSortDir('asc')
-    } else if (sortDir === 'asc') {
-      setSortDir('desc')
-    } else if (sortDir === 'desc') {
-      setSortField(null)
-      setSortDir(null)
-    } else {
-      setSortDir('asc')
-    }
-  }
-
-  // ── Actions ───────────────────────────────────────────────────────────────
 
   async function handleDelete() {
     if (!confirmDelete) return
@@ -1061,358 +947,225 @@ export default function MonitoringSantriPage() {
     }
   }
 
-  // ── Reset filter ──────────────────────────────────────────────────────────
-
-  function resetAll() {
-    setSearch('')
-    setFilterJilid('')
-    setSortField(null)
-    setSortDir(null)
-  }
-
-  const isFiltered = search || filterJilid || sortField
-
-  // ── Filter + Sort data ────────────────────────────────────────────────────
-
-  const filtered = [...santriList]
-    .filter((s) => {
-      const matchSearch = s.nama.toLowerCase().includes(search.toLowerCase())
-      const matchJilid = filterJilid === '' || s.jilid_saat_ini === Number(filterJilid)
-      return matchSearch && matchJilid
-    })
-    .sort((a, b) => {
-      if (!sortField || !sortDir) return 0
-
-      const va = a[sortField as keyof SantriDenganRekomendasi]
-      const vb = b[sortField as keyof SantriDenganRekomendasi]
-
-      if (va == null && vb == null) return 0
-      if (va == null) return 1
-      if (vb == null) return -1
-
-      let cmp = 0
-
-      if (typeof va === 'number' && typeof vb === 'number') {
-        cmp = va - vb
-      } else {
-        cmp = String(va).localeCompare(String(vb), 'id')
-      }
-
-      return sortDir === 'asc' ? cmp : -cmp
-    })
-
-  // ── TH helper class ───────────────────────────────────────────────────────
-
-  const thClass =
-    'text-left px-4 py-3 text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none'
+  const columns: ColumnDef<SantriDenganRekomendasi>[] = [
+    {
+      key: 'nama',
+      header: 'Nama',
+      sortable: true,
+      cell: (row) => (
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+            {row.nama.charAt(0)}
+          </div>
+          <div>
+            <p className="font-medium text-foreground text-sm">{row.nama}</p>
+            <p className="text-xs text-muted-foreground">
+              {row.jenis_kelamin === 'L'
+                ? 'Laki-laki'
+                : row.jenis_kelamin === 'P'
+                  ? 'Perempuan'
+                  : '—'}
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'jilid_saat_ini',
+      header: 'Jilid',
+      sortable: true,
+      cell: (row) => (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-semibold">
+          <IconBookmark size={10} />
+          {jilidLabel(row.jilid_saat_ini)}
+        </span>
+      ),
+    },
+    {
+      key: 'total_pengulangan_taskih',
+      header: 'Taskih',
+      sortable: true,
+      cell: (row) => (
+        <span className="text-sm font-medium text-foreground">{row.total_pengulangan_taskih}x</span>
+      ),
+    },
+    {
+      key: 'status_rekomendasi',
+      header: 'Status',
+      sortable: true,
+      cell: (row) => <StatusBadge status={row.status_rekomendasi} />,
+    },
+    {
+      key: 'probabilitas',
+      header: 'Probabilitas',
+      cell: (row) =>
+        row.probabilitas != null ? (
+          <div className="flex items-center gap-2">
+            <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  row.status_rekomendasi === 'BBK' ? 'bg-red-500' : 'bg-emerald-500'
+                }`}
+                style={{ width: `${Math.round((row.probabilitas ?? 0) * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {Math.round((row.probabilitas ?? 0) * 100)}%
+            </span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+    },
+    {
+      key: 'created_at',
+      header: 'Terdaftar',
+      sortable: true,
+      cell: (row) => (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+          <IconCalendar size={12} />
+          {formatDate(row.created_at)}
+        </span>
+      ),
+    },
+    {
+      key: 'id',
+      header: 'Aksi',
+      align: 'center',
+      cell: (row) => (
+        <div
+          className="flex items-center justify-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => setDetailSantri(row)}
+            className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            title="Lihat detail"
+          >
+            <IconEye size={15} />
+          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => openEdit(row)}
+                className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                title="Edit"
+              >
+                <IconEdit size={15} />
+              </button>
+              <button
+                onClick={() => setConfirmReklas({ id: row.id, nama: row.nama })}
+                className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors"
+                title="Klasifikasi ulang"
+              >
+                <IconRotateClockwise size={15} />
+              </button>
+              <button
+                onClick={() => setConfirmDelete({ id: row.id, nama: row.nama })}
+                className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg text-muted-foreground hover:text-red-500 transition-colors"
+                title="Hapus"
+              >
+                <IconTrash size={15} />
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ]
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="px-4 sm:px-6 py-6 space-y-6">
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <IconUsers size={24} className="text-primary" />
-              Monitoring Santri
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Kelola data santri dan klasifikasi BBK/TBBK otomatis
-            </p>
-          </div>
+    <div className="min-h-screen bg-background p-3 sm:p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <IconUsers size={24} className="text-primary" />
+            Monitoring Santri
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Kelola data santri dan klasifikasi BBK/TBBK otomatis
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => {
-              setEditSantri(null)
-              setEditProgressList([])
-              setShowForm(true)
-            }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors shadow-sm"
+            onClick={loadData}
+            disabled={loading}
+            className="flex items-center gap-2 border border-border text-foreground px-4 py-2.5 rounded-xl font-medium text-sm hover:bg-muted transition-colors disabled:opacity-50"
           >
-            <IconUserPlus size={16} />
-            Tambah Santri
+            <IconRefresh size={16} className={loading ? 'animate-spin' : ''} />
+            Refresh
           </button>
-        </div>
-
-        {/* ── Stats ──────────────────────────────────────────────────── */}
-        {stats && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard
-              label="Total Santri"
-              value={stats.total_santri}
-              icon={IconUsers}
-              color="bg-primary"
-            />
-            <StatCard
-              label="BBK"
-              value={stats.bbk_count}
-              icon={IconAlertTriangle}
-              color="bg-red-500"
-            />
-            <StatCard
-              label="TBBK"
-              value={stats.tbbk_count}
-              icon={IconCheck}
-              color="bg-emerald-500"
-            />
-            <StatCard
-              label="Rata-rata Durasi"
-              value={`${stats.rata_rata_durasi} bln`}
-              icon={IconTrendingUp}
-              color="bg-amber-500"
-            />
-          </div>
-        )}
-
-        {/* ── Filters ────────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-          <div className="relative flex-1">
-            <IconSearch
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari nama santri..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-2">
-              <IconFilter size={15} className="text-muted-foreground" />
-              <select
-                value={filterJilid}
-                onChange={(e) => setFilterJilid(e.target.value)}
-                className="px-4 py-2.5 rounded-xl border border-border bg-background text-sm min-w-35 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="">Semua Jilid</option>
-                {[0, 1, 2, 3, 4, 5, 6, 7].map((j) => (
-                  <option key={j} value={j}>
-                    {j === 7 ? 'Al-Quran' : `Jilid ${j}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {isFiltered && (
-              <button
-                onClick={resetAll}
-                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-border bg-background text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <IconRotateClockwise size={14} />
-                Reset
-              </button>
-            )}
+          {isAdmin && (
             <button
-              onClick={loadData}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-background text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              onClick={() => {
+                setEditSantri(null)
+                setEditProgressList([])
+                setShowForm(true)
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-xl hover:bg-primary/90 transition-colors shadow-sm"
             >
-              <IconRefresh size={15} />
-              Refresh
+              <IconUserPlus size={16} />
+              Tambah Santri
             </button>
-          </div>
-        </div>
-
-        {/* ── Table ──────────────────────────────────────────────────── */}
-        <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-10">
-                    No
-                  </th>
-
-                  <th className={thClass} onClick={() => handleSort('nama')}>
-                    <span className="flex items-center gap-1">
-                      Nama
-                      <SortIcon col="nama" sortKey={sortField} sortDir={sortDir} />
-                    </span>
-                  </th>
-
-                  <th className={thClass} onClick={() => handleSort('jilid_saat_ini')}>
-                    <span className="flex items-center gap-1">
-                      Jilid
-                      <SortIcon col="jilid_saat_ini" sortKey={sortField} sortDir={sortDir} />
-                    </span>
-                  </th>
-
-                  <th className={thClass} onClick={() => handleSort('total_pengulangan_taskih')}>
-                    <span className="flex items-center gap-1">
-                      Taskih
-                      <SortIcon
-                        col="total_pengulangan_taskih"
-                        sortKey={sortField}
-                        sortDir={sortDir}
-                      />
-                    </span>
-                  </th>
-
-                  <th className={thClass} onClick={() => handleSort('status_rekomendasi')}>
-                    <span className="flex items-center gap-1">
-                      Status
-                      <SortIcon col="status_rekomendasi" sortKey={sortField} sortDir={sortDir} />
-                    </span>
-                  </th>
-
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">
-                    Probabilitas
-                  </th>
-
-                  <th className={thClass} onClick={() => handleSort('created_at')}>
-                    <span className="flex items-center gap-1">
-                      Terdaftar
-                      <SortIcon col="created_at" sortKey={sortField} sortDir={sortDir} />
-                    </span>
-                  </th>
-
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground">
-                    Aksi
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i}>
-                      {Array.from({ length: 8 }).map((__, j) => (
-                        <td key={j} className="px-4 py-3">
-                          <div className="h-4 bg-muted animate-pulse rounded" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2">
-                        <IconBook size={32} className="text-muted-foreground/40" />
-                        <p className="text-muted-foreground text-sm">
-                          {search ? 'Tidak ada santri yang cocok' : 'Belum ada data santri'}
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((santri, idx) => (
-                    <tr key={santri.id} className="hover:bg-muted/30 transition-colors group">
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{idx + 1}</td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
-                            {santri.nama.charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-medium text-foreground text-sm">{santri.nama}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {santri.jenis_kelamin === 'L'
-                                ? 'Laki-laki'
-                                : santri.jenis_kelamin === 'P'
-                                  ? 'Perempuan'
-                                  : '—'}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-semibold">
-                          <IconBookmark size={10} />
-                          {jilidLabel(santri.jilid_saat_ini)}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-foreground text-sm font-medium">
-                        {santri.total_pengulangan_taskih}x
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <StatusBadge status={santri.status_rekomendasi} />
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {santri.probabilitas != null ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${
-                                  santri.status_rekomendasi === 'BBK'
-                                    ? 'bg-red-500'
-                                    : 'bg-emerald-500'
-                                }`}
-                                style={{
-                                  width: `${Math.round((santri.probabilitas ?? 0) * 100)}%`,
-                                }}
-                              />
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {Math.round((santri.probabilitas ?? 0) * 100)}%
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </td>
-
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {formatDate(santri.created_at)}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => setDetailSantri(santri)}
-                            className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-                            title="Lihat detail"
-                          >
-                            <IconEye size={15} />
-                          </button>
-                          <button
-                            onClick={() => openEdit(santri)}
-                            className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-                            title="Edit"
-                          >
-                            <IconEdit size={15} />
-                          </button>
-                          <button
-                            onClick={() => setConfirmReklas({ id: santri.id, nama: santri.nama })}
-                            className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors"
-                            title="Klasifikasi ulang"
-                          >
-                            <IconRefresh size={15} />
-                          </button>
-                          <button
-                            onClick={() => setConfirmDelete({ id: santri.id, nama: santri.nama })}
-                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg text-muted-foreground hover:text-red-500 transition-colors"
-                            title="Hapus"
-                          >
-                            <IconTrash size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Menampilkan {filtered.length} dari {santriList.length} santri
-            </p>
-            {isFiltered && (
-              <button onClick={resetAll} className="text-xs text-primary hover:underline">
-                Reset semua filter
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {/* ── Modals ────────────────────────────────────────────────────── */}
+      {stats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            label="Total Santri"
+            value={stats.total_santri}
+            icon={IconUsers}
+            color="bg-primary"
+          />
+          <StatCard
+            label="BBK"
+            value={stats.bbk_count}
+            icon={IconAlertTriangle}
+            color="bg-red-500"
+          />
+          <StatCard label="TBBK" value={stats.tbbk_count} icon={IconCheck} color="bg-emerald-500" />
+          <StatCard
+            label="Rata-rata Durasi"
+            value={`${stats.rata_rata_durasi} bln`}
+            icon={IconTrendingUp}
+            color="bg-amber-500"
+          />
+        </div>
+      )}
 
-      {showForm && (
+      <DataTable<SantriDenganRekomendasi>
+        data={santriList}
+        columns={columns}
+        rowKey="id"
+        pageSize={10}
+        searchFields={['nama']}
+        searchPlaceholder="Cari nama santri..."
+        selectable={isAdmin}
+        onBulkDelete={
+          isAdmin
+            ? async (keys) => {
+                const ids = keys as string[]
+                try {
+                  await Promise.all(ids.map((id) => deleteSantri(id)))
+                  setSantriList((prev) => prev.filter((s) => !ids.includes(s.id)))
+                  toast.success(`${ids.length} santri berhasil dihapus`)
+                } catch (err: unknown) {
+                  toast.error((err as Error).message ?? 'Gagal menghapus')
+                }
+              }
+            : undefined
+        }
+        emptyMessage="Belum ada data santri."
+        toolbarExtra={
+          <span className="text-xs text-muted-foreground">
+            Total <span className="font-semibold text-foreground">{santriList.length}</span> santri
+          </span>
+        }
+      />
+
+      {isAdmin && showForm && (
         <SantriForm
           initial={editSantri}
           progressList={editProgressList}
@@ -1427,7 +1180,7 @@ export default function MonitoringSantriPage() {
 
       {detailSantri && <DetailModal santri={detailSantri} onClose={() => setDetailSantri(null)} />}
 
-      {confirmDelete && (
+      {isAdmin && confirmDelete && (
         <ConfirmModal
           title={`Hapus santri "${confirmDelete.nama}"?`}
           description="Tindakan ini tidak dapat dibatalkan. Seluruh data progress dan riwayat klasifikasi santri ini akan ikut terhapus."
@@ -1439,7 +1192,7 @@ export default function MonitoringSantriPage() {
         />
       )}
 
-      {confirmReklas && (
+      {isAdmin && confirmReklas && (
         <ConfirmModal
           title={`Klasifikasi ulang "${confirmReklas.nama}"?`}
           description="Model akan menjalankan ulang klasifikasi BBK/TBBK berdasarkan data progress aktif santri ini."

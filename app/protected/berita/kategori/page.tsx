@@ -23,15 +23,11 @@ import { toast } from 'sonner'
 import { ModalDeleteKategori } from '@/components/protected/berita-kategori/modal-delete-kategori'
 import { ModalTambahKategori } from '@/components/protected/berita-kategori/modal-tambah-kategori'
 import { ModalEditKategori } from '@/components/protected/berita-kategori/modal-edit-kategori'
-
-// ─── Utils ────────────────────────────────────────────────────────────────────
+import { createClient } from '@/lib/supabase/client'
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
-
-
-// ─── StatCard (same pattern as BeritaPage) ────────────────────────────────────
 
 function StatCard({
   icon,
@@ -48,7 +44,6 @@ function StatCard({
 }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group">
-      {/* Desktop */}
       <div className="hidden sm:flex items-start gap-4">
         <div className={`w-11 h-11 rounded-lg flex items-center justify-center shrink-0 ${accent}`}>
           {icon}
@@ -64,7 +59,6 @@ function StatCard({
         </div>
       </div>
 
-      {/* Mobile */}
       <div className="flex sm:hidden flex-col gap-3">
         <div className="flex items-start gap-3">
           <div
@@ -89,29 +83,32 @@ function StatCard({
   )
 }
 
-// ─── KategoriWithCount type ───────────────────────────────────────────────────
-
 interface KategoriWithCount extends BeritaKategori {
   beritaCount: number
 }
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function BeritaKategoriPage() {
   const [kategoris, setKategoris] = useState<KategoriWithCount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [isAdmin, setIsAdmin] = useState(false)
+
   const [modalTambahOpen, setModalTambahOpen] = useState(false)
   const [editKategori, setEditKategori] = useState<KategoriWithCount | null>(null)
   const [deleteKategoriTarget, setDeleteKategoriTarget] = useState<KategoriWithCount | null>(null)
-
-  // ── Load data ──────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const role = user?.app_metadata?.role ?? null
+      setIsAdmin(role === 'admin')
+
       const [kategoriList, beritaList] = await Promise.all([fetchKategori(), fetchBerita()])
 
       const countMap: Record<string, number> = {}
@@ -137,13 +134,9 @@ export default function BeritaKategoriPage() {
     loadData()
   }, [loadData])
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-
   const totalBerita = kategoris.reduce((a, k) => a + k.beritaCount, 0)
   const kategoriTerpakai = kategoris.filter((k) => k.beritaCount > 0).length
   const kategoriTerbanyak = [...kategoris].sort((a, b) => b.beritaCount - a.beritaCount)[0]
-
-  // ── Handlers ───────────────────────────────────────────────────────────────
 
   function handleSave(kategori: BeritaKategori) {
     setKategoris((prev) => [{ ...kategori, beritaCount: 0 }, ...prev])
@@ -164,7 +157,6 @@ export default function BeritaKategoriPage() {
       })
     }
   }
-  // ── Columns ────────────────────────────────────────────────────────────────
 
   const columns: ColumnDef<KategoriWithCount>[] = [
     {
@@ -173,10 +165,8 @@ export default function BeritaKategoriPage() {
       sortable: true,
       cell: (row) => {
         const hasDeskripsi = row.deskripsi && row.deskripsi.trim()
-
         return (
           <div className="flex items-start gap-3 min-w-0 max-w-xl">
-            {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground truncate">{row.nama}</span>
@@ -186,8 +176,6 @@ export default function BeritaKategoriPage() {
                   </span>
                 )}
               </div>
-
-              {/* Deskripsi */}
               {hasDeskripsi && (
                 <p
                   className="text-xs text-muted-foreground mt-0.5 line-clamp-1"
@@ -205,21 +193,18 @@ export default function BeritaKategoriPage() {
       key: 'beritaCount',
       header: 'Jumlah Berita',
       sortable: true,
-      cell: (row) => {
-        return (
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-secondary/50 border-border text-foreground dark:bg-white/5 dark:border-white/10">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-              <span>{row.nama}</span>
-            </span>
-
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <IconNews size={13} />
-              {row.beritaCount} berita
-            </span>
-          </div>
-        )
-      },
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-secondary/50 border-border text-foreground dark:bg-white/5 dark:border-white/10">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+            <span>{row.nama}</span>
+          </span>
+          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+            <IconNews size={13} />
+            {row.beritaCount} berita
+          </span>
+        </div>
+      ),
     },
     {
       key: 'proporsi',
@@ -241,39 +226,40 @@ export default function BeritaKategoriPage() {
         )
       },
     },
-    {
-      key: 'aksi',
-      header: 'Aksi',
-      align: 'center',
-      cell: (row) => (
-        <div
-          className="flex items-center justify-center gap-1.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setEditKategori(row)}
-            className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-            title="Edit"
-          >
-            <IconEdit size={15} />
-          </button>
-          <button
-            onClick={() => setDeleteKategoriTarget(row)}
-            className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-            title="Hapus"
-          >
-            <IconTrash size={15} />
-          </button>
-        </div>
-      ),
-    },
+    ...(isAdmin
+      ? [
+          {
+            key: 'aksi' as keyof KategoriWithCount,
+            header: 'Aksi',
+            align: 'center' as const,
+            cell: (row: KategoriWithCount) => (
+              <div
+                className="flex items-center justify-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setEditKategori(row)}
+                  className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                  title="Edit"
+                >
+                  <IconEdit size={15} />
+                </button>
+                <button
+                  onClick={() => setDeleteKategoriTarget(row)}
+                  className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Hapus"
+                >
+                  <IconTrash size={15} />
+                </button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ]
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background p-3 sm:p-6">
-      {/* Header */}
       <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2.5 mb-1">
@@ -295,19 +281,20 @@ export default function BeritaKategoriPage() {
             <IconRefresh size={16} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
-          <button
-            onClick={() => setModalTambahOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
-          >
-            <IconPlus size={17} />
-            Tambah Kategori
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setModalTambahOpen(true)}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity shadow-sm"
+            >
+              <IconPlus size={17} />
+              Tambah Kategori
+            </button>
+          )}
         </div>
       </div>
 
       <hr className="my-4" />
 
-      {/* Error */}
       {error && (
         <div className="mb-6 flex items-center gap-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-xl px-4 py-3">
           <IconAlertCircle size={18} className="shrink-0" />
@@ -318,7 +305,6 @@ export default function BeritaKategoriPage() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <StatCard
           icon={
@@ -362,7 +348,6 @@ export default function BeritaKategoriPage() {
         />
       </div>
 
-      {/* Table */}
       {loading && kategoris.length === 0 ? (
         <div className="flex items-center justify-center h-48 text-muted-foreground gap-2">
           <IconLoader2 size={20} className="animate-spin" />
@@ -377,8 +362,8 @@ export default function BeritaKategoriPage() {
           defaultSort={{ key: 'beritaCount', direction: 'desc' }}
           searchFields={['nama']}
           searchPlaceholder="Cari kategori..."
-          selectable
-          onBulkDelete={(keys) => handleBulkDelete(keys as string[])}
+          selectable={isAdmin}
+          onBulkDelete={isAdmin ? (keys) => handleBulkDelete(keys as string[]) : undefined}
           emptyMessage="Tidak ada kategori ditemukan."
           toolbarExtra={
             <span className="text-xs text-muted-foreground">
@@ -389,33 +374,36 @@ export default function BeritaKategoriPage() {
         />
       )}
 
-      {/* Modals */}
-      <ModalTambahKategori
-        open={modalTambahOpen}
-        onClose={() => setModalTambahOpen(false)}
-        onSave={handleSave}
-      />
+      {isAdmin && (
+        <>
+          <ModalTambahKategori
+            open={modalTambahOpen}
+            onClose={() => setModalTambahOpen(false)}
+            onSave={handleSave}
+          />
 
-      {editKategori && (
-        <ModalEditKategori
-          open={!!editKategori}
-          onClose={() => setEditKategori(null)}
-          kategori={editKategori}
-          onUpdate={handleUpdate}
-        />
-      )}
+          {editKategori && (
+            <ModalEditKategori
+              open={!!editKategori}
+              onClose={() => setEditKategori(null)}
+              kategori={editKategori}
+              onUpdate={handleUpdate}
+            />
+          )}
 
-      {deleteKategoriTarget && (
-        <ModalDeleteKategori
-          open={!!deleteKategoriTarget}
-          onClose={() => setDeleteKategoriTarget(null)}
-          kategori={deleteKategoriTarget}
-          beritaCount={deleteKategoriTarget.beritaCount}
-          onDeleted={(id) => {
-            setKategoris((prev) => prev.filter((k) => k.id !== id))
-            setDeleteKategoriTarget(null)
-          }}
-        />
+          {deleteKategoriTarget && (
+            <ModalDeleteKategori
+              open={!!deleteKategoriTarget}
+              onClose={() => setDeleteKategoriTarget(null)}
+              kategori={deleteKategoriTarget}
+              beritaCount={deleteKategoriTarget.beritaCount}
+              onDeleted={(id) => {
+                setKategoris((prev) => prev.filter((k) => k.id !== id))
+                setDeleteKategoriTarget(null)
+              }}
+            />
+          )}
+        </>
       )}
     </div>
   )

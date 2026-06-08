@@ -13,7 +13,6 @@ import {
   IconLoader2,
   IconAlertCircle,
   IconRefresh,
-  IconChevronRight,
   IconFileText,
   IconHourglass,
   IconCircleCheck,
@@ -45,8 +44,7 @@ import { ModalDeleteBerita } from '@/components/protected/berita/modal-delete-be
 import { fetchBerita, deleteBulkBerita, type Berita, type BeritaKategori } from '@/lib/berita'
 
 import { fetchKategori } from '@/lib/berita-kategori'
-
-// ───────────────────────────────────────────────────────────────────────────────
+import { createClient } from '@/lib/supabase/client'
 
 function formatTanggal(iso: string) {
   return new Date(iso).toLocaleDateString('id-ID', {
@@ -55,8 +53,6 @@ function formatTanggal(iso: string) {
     year: 'numeric',
   })
 }
-
-// ───────────────────────────────────────────────────────────────────────────────
 
 interface StatCardProps {
   title: string
@@ -89,8 +85,6 @@ function StatCard({ title, value, description, icon }: StatCardProps) {
   )
 }
 
-// ───────────────────────────────────────────────────────────────────────────────
-
 export default function BeritaPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -101,24 +95,30 @@ export default function BeritaPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [isAdmin, setIsAdmin] = useState(false)
+
   const [modalOpen, setModalOpen] = useState(false)
   const [editBerita, setEditBerita] = useState<Berita | null>(null)
   const [deleteBeritaTarget, setDeleteBeritaTarget] = useState<Berita | null>(null)
 
-  // bulk delete
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deletingBulk, setDeletingBulk] = useState(false)
 
   const [externalFilter, setExternalFilter] = useState<Record<string, string>>({})
 
-  // ───────────────────────────────────────────────────────────────────────────
-
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const role = user?.app_metadata?.role ?? null
+      setIsAdmin(role === 'admin')
+
       const [beritaList, kategoriList] = await Promise.all([fetchBerita(), fetchKategori()])
 
       setData(beritaList)
@@ -134,12 +134,10 @@ export default function BeritaPage() {
     loadData()
   }, [loadData])
 
-  // ───────────────────────────────────────────────────────────────────────────
-
   useEffect(() => {
     const editId = searchParams.get('edit')
 
-    if (!editId || data.length === 0) return
+    if (!editId || data.length === 0 || !isAdmin) return
 
     const target = data.find((b) => b.id === editId)
 
@@ -147,31 +145,19 @@ export default function BeritaPage() {
 
     setEditBerita(target)
 
-    router.replace('/protected/berita', {
-      scroll: false,
-    })
-  }, [searchParams, data, router])
-
-  // ───────────────────────────────────────────────────────────────────────────
+    router.replace('/protected/berita', { scroll: false })
+  }, [searchParams, data, router, isAdmin])
 
   const publishedCount = data.filter((b) => b.status === 'published').length
-
   const draftCount = data.filter((b) => b.status === 'draft').length
-
   const avgWaktuBaca = data.length
     ? Math.round(data.reduce((acc, item) => acc + item.waktu_baca, 0) / data.length)
     : 0
-
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-
   const recentCount = data.filter((b) => new Date(b.created_at) >= sevenDaysAgo).length
 
-  // ───────────────────────────────────────────────────────────────────────────
-
   function handleManageDraft() {
-    setExternalFilter({
-      status: 'draft',
-    })
+    setExternalFilter({ status: 'draft' })
   }
 
   function handleSave(berita: Berita) {
@@ -185,10 +171,6 @@ export default function BeritaPage() {
   function handleDeleted(id: string) {
     setData((prev) => prev.filter((item) => item.id !== id))
   }
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // BULK DELETE
-  // ───────────────────────────────────────────────────────────────────────────
 
   function handleBulkDelete(ids: string[]) {
     setSelectedIds(ids)
@@ -218,34 +200,21 @@ export default function BeritaPage() {
     }
   }
 
-  // ───────────────────────────────────────────────────────────────────────────
-
   const tableFilters: DataTableFilter<Berita>[] = [
     {
       key: 'kategori_id',
       label: 'Kategori',
-      options: kategoris.map((k) => ({
-        label: k.nama,
-        value: k.id,
-      })),
+      options: kategoris.map((k) => ({ label: k.nama, value: k.id })),
     },
     {
       key: 'status',
       label: 'Status',
       options: [
-        {
-          label: 'Published',
-          value: 'published',
-        },
-        {
-          label: 'Draft',
-          value: 'draft',
-        },
+        { label: 'Published', value: 'published' },
+        { label: 'Draft', value: 'draft' },
       ],
     },
   ]
-
-  // ───────────────────────────────────────────────────────────────────────────
 
   const columns: ColumnDef<Berita>[] = [
     {
@@ -310,38 +279,39 @@ export default function BeritaPage() {
       ),
     },
 
-    {
-      key: 'id',
-      header: 'Aksi',
-      align: 'center',
-      cell: (row) => (
-        <div
-          className="flex items-center justify-center gap-1"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setEditBerita(row)}
-            className="rounded-lg p-2 text-primary transition-colors hover:bg-primary/10"
-          >
-            <IconEdit size={16} />
-          </button>
+    ...(isAdmin
+      ? [
+          {
+            key: 'id' as keyof Berita,
+            header: 'Aksi',
+            align: 'center' as const,
+            cell: (row: Berita) => (
+              <div
+                className="flex items-center justify-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => setEditBerita(row)}
+                  className="rounded-lg p-2 text-primary transition-colors hover:bg-primary/10"
+                >
+                  <IconEdit size={16} />
+                </button>
 
-          <button
-            onClick={() => setDeleteBeritaTarget(row)}
-            className="rounded-lg p-2 text-destructive transition-colors hover:bg-destructive/10"
-          >
-            <IconTrash size={16} />
-          </button>
-        </div>
-      ),
-    },
+                <button
+                  onClick={() => setDeleteBeritaTarget(row)}
+                  className="rounded-lg p-2 text-destructive transition-colors hover:bg-destructive/10"
+                >
+                  <IconTrash size={16} />
+                </button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ]
-
-  // ───────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
-      {/* Header */}
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-3">
@@ -367,17 +337,18 @@ export default function BeritaPage() {
             Refresh
           </button>
 
-          <button
-            onClick={() => setModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-          >
-            <IconPlus size={16} />
-            Tambah
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+            >
+              <IconPlus size={16} />
+              Tambah
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
           <IconAlertCircle size={18} />
@@ -386,7 +357,6 @@ export default function BeritaPage() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           title="Total Berita"
@@ -423,7 +393,6 @@ export default function BeritaPage() {
         />
       </div>
 
-      {/* Table */}
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-4">
@@ -433,12 +402,14 @@ export default function BeritaPage() {
               <CardDescription>Total {data.length} berita tersedia</CardDescription>
             </div>
 
-            <button
-              onClick={handleManageDraft}
-              className="hidden rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted md:block"
-            >
-              Lihat Draft
-            </button>
+            {isAdmin && (
+              <button
+                onClick={handleManageDraft}
+                className="hidden rounded-lg border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted md:block"
+              >
+                Lihat Draft
+              </button>
+            )}
           </div>
         </CardHeader>
 
@@ -455,83 +426,83 @@ export default function BeritaPage() {
               columns={columns}
               rowKey="id"
               pageSize={10}
-              selectable
+              selectable={isAdmin}
               filters={tableFilters}
               searchFields={['judul', 'ringkasan']}
               searchPlaceholder="Cari berita..."
               externalFilter={externalFilter}
               emptyMessage="Tidak ada berita ditemukan."
-              onBulkDelete={(keys) => handleBulkDelete(keys as string[])}
+              onBulkDelete={isAdmin ? (keys) => handleBulkDelete(keys as string[]) : undefined}
             />
           )}
         </CardContent>
       </Card>
 
-      {/* Modal Tambah */}
-      <ModalTambahBerita
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSave}
-        kategoris={kategoris}
-      />
+      {isAdmin && (
+        <>
+          <ModalTambahBerita
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            onSave={handleSave}
+            kategoris={kategoris}
+          />
 
-      {/* Modal Edit */}
-      {editBerita && (
-        <ModalEditBerita
-          open={!!editBerita}
-          onClose={() => setEditBerita(null)}
-          onUpdate={handleUpdate}
-          berita={editBerita}
-          kategoris={kategoris}
-        />
+          {editBerita && (
+            <ModalEditBerita
+              open={!!editBerita}
+              onClose={() => setEditBerita(null)}
+              onUpdate={handleUpdate}
+              berita={editBerita}
+              kategoris={kategoris}
+            />
+          )}
+
+          {deleteBeritaTarget && (
+            <ModalDeleteBerita
+              open={!!deleteBeritaTarget}
+              onClose={() => setDeleteBeritaTarget(null)}
+              onDeleted={handleDeleted}
+              berita={deleteBeritaTarget}
+            />
+          )}
+
+          <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Hapus beberapa berita?</AlertDialogTitle>
+
+                <AlertDialogDescription>
+                  Tindakan ini tidak dapat dibatalkan.{' '}
+                  <span className="font-semibold text-foreground">{selectedIds.length} berita</span>{' '}
+                  akan dihapus permanen.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletingBulk}>Batal</AlertDialogCancel>
+
+                <AlertDialogAction
+                  onClick={confirmBulkDelete}
+                  disabled={deletingBulk}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deletingBulk ? (
+                    <>
+                      <IconLoader2 size={16} className="mr-2 animate-spin" />
+                      Menghapus...
+                    </>
+                  ) : (
+                    <>
+                      <IconTrash size={16} className="mr-2" />
+                      Hapus
+                    </>
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       )}
-
-      {/* Modal Delete Single */}
-      {deleteBeritaTarget && (
-        <ModalDeleteBerita
-          open={!!deleteBeritaTarget}
-          onClose={() => setDeleteBeritaTarget(null)}
-          onDeleted={handleDeleted}
-          berita={deleteBeritaTarget}
-        />
-      )}
-
-      {/* Bulk Delete Confirmation */}
-      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Hapus beberapa berita?</AlertDialogTitle>
-
-            <AlertDialogDescription>
-              Tindakan ini tidak dapat dibatalkan.{' '}
-              <span className="font-semibold text-foreground">{selectedIds.length} berita</span>{' '}
-              akan dihapus permanen.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingBulk}>Batal</AlertDialogCancel>
-
-            <AlertDialogAction
-              onClick={confirmBulkDelete}
-              disabled={deletingBulk}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deletingBulk ? (
-                <>
-                  <IconLoader2 size={16} className="mr-2 animate-spin" />
-                  Menghapus...
-                </>
-              ) : (
-                <>
-                  <IconTrash size={16} className="mr-2" />
-                  Hapus
-                </>
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

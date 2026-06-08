@@ -18,6 +18,7 @@ import {
   IconUserCircle,
 } from '@tabler/icons-react'
 
+import { createClient } from '@/lib/supabase/client'
 import { getPengaturanWebsite } from '@/lib/pengaturan'
 
 import { NavMain } from '@/components/nav-main'
@@ -84,6 +85,7 @@ const data = {
       title: 'Aturan Capaian',
       url: '/protected/aturan-capaian',
       icon: IconChalkboard,
+      adminOnly: true,
     },
     {
       title: 'Data Guru',
@@ -102,10 +104,11 @@ const data = {
       title: 'Pengaturan',
       url: '/protected/pengaturan',
       icon: IconSettings,
+      adminOnly: true,
     },
     {
       title: 'Keluar Akun',
-      url: '#',
+      url: '/',
       icon: IconLogout,
       isLogout: true,
     },
@@ -115,19 +118,32 @@ const data = {
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const [namaRTQ, setNamaRTQ] = React.useState('RTQ')
   const [logoUrl, setLogoUrl] = React.useState('')
+  const [role, setRole] = React.useState<string | null>(null)
 
   React.useEffect(() => {
-    const fetchPengaturan = async () => {
+    const loadData = async () => {
       const result = await getPengaturanWebsite()
 
       if (result.data) {
         setNamaRTQ(result.data.nama_rtq || 'RTQ')
         setLogoUrl(result.data.logo_url || '')
       }
+
+      const supabase = createClient()
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      setRole(user?.app_metadata?.role ?? null)
     }
 
-    fetchPengaturan()
+    loadData()
   }, [])
+
+  const navAkademik = data.navAkademik.filter((item) => !item.adminOnly || role === 'admin')
+
+  const navSistem = data.navSistem.filter((item) => !item.adminOnly || role === 'admin')
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -160,10 +176,10 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
         <NavKonten items={data.navKonten} />
 
-        <NavAkademik items={data.navAkademik} />
+        <NavAkademik items={navAkademik} />
 
         <div className="mt-auto">
-          <NavSistem items={data.navSistem} />
+          <NavSistem items={navSistem} />
         </div>
       </SidebarContent>
 

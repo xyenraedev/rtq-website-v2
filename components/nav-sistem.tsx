@@ -1,11 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { type Icon } from '@tabler/icons-react'
 import { toast } from 'sonner'
+
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -15,6 +16,18 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 export function NavSistem({
   items,
@@ -28,41 +41,92 @@ export function NavSistem({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+
   const { setOpenMobile, openMobile } = useSidebar()
 
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
   const handleNavigation = () => {
-    if (openMobile) setOpenMobile(false)
+    if (openMobile) {
+      setOpenMobile(false)
+    }
   }
 
   async function handleLogout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    toast.success('Berhasil keluar')
-    router.push('/login')
+    try {
+      setIsLoggingOut(true)
+
+      const supabase = createClient()
+
+      const { error } = await supabase.auth.signOut()
+
+      if (error) {
+        throw error
+      }
+
+      toast.success('Berhasil keluar dari sistem')
+
+      if (openMobile) {
+        setOpenMobile(false)
+      }
+
+      router.replace('/')
+      router.refresh()
+    } catch (error) {
+      console.error(error)
+
+      toast.error('Gagal keluar dari sistem')
+    } finally {
+      setIsLoggingOut(false)
+    }
   }
 
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Sistem &amp; Akun</SidebarGroupLabel>
+
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
             if (item.isLogout) {
               return (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    tooltip={item.title}
-                    onClick={handleLogout}
-                    className="min-w-8 duration-200 ease-linear text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  >
-                    {item.icon && <item.icon size={20} />}
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <SidebarMenuButton
+                        tooltip={item.title}
+                        className="min-w-8 text-destructive duration-200 ease-linear hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        {item.icon && <item.icon size={20} />}
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </AlertDialogTrigger>
+
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Keluar dari akun?</AlertDialogTitle>
+
+                        <AlertDialogDescription>
+                          Anda akan keluar dari sesi saat ini dan perlu login kembali untuk
+                          mengakses dashboard.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Batal</AlertDialogCancel>
+
+                        <AlertDialogAction onClick={handleLogout} disabled={isLoggingOut}>
+                          {isLoggingOut ? 'Sedang keluar...' : 'Ya, Keluar'}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </SidebarMenuItem>
               )
             }
 
             const isActive = pathname === item.url
+
             return (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
