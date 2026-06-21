@@ -18,11 +18,10 @@ import {
   IconX,
 } from '@tabler/icons-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import {
-  EvaluasiResult,
+  type EvaluasiResult,
   fetchAturanAktif,
   fetchRiwayatAturan,
   simpanAturan,
@@ -31,10 +30,8 @@ import {
   deleteAturan,
   setAturanAktif,
 } from '@/lib/ml-services/aturan-capaian'
-import { AturanCapaian } from '@/lib/types'
+import type { AturanCapaian } from '@/lib/types'
 import { reklasifikasiSemua } from '@/lib/ml-services/hasil-rekomendasi'
-
-// ── Sub-components ────────────────────────────────────────────────────────────
 
 import type {
   FormValues,
@@ -43,7 +40,6 @@ import type {
   ProcessConfig,
 } from '@/components/protected/aturan-capaian/types'
 import { isDuplikat, namaModel } from '@/components/protected/aturan-capaian/helpers'
-import { MetricCard } from '@/components/protected/aturan-capaian/metric-card'
 import { ModalDelete } from '@/components/protected/aturan-capaian/modal-delete'
 import { ModalDetail } from '@/components/protected/aturan-capaian/modal-detail'
 import { ModalLatih } from '@/components/protected/aturan-capaian/modal-latih'
@@ -54,8 +50,7 @@ import { ModalSimpan } from '@/components/protected/aturan-capaian/modal-simpan'
 import { ProcessDialog } from '@/components/protected/aturan-capaian/process-dialog'
 import { SliderInput } from '@/components/protected/aturan-capaian/slider-input'
 import { RiwayatCard } from '@/components/protected/aturan-capaian/riwayat-card'
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+import { ModelReportSection } from '@/components/protected/aturan-capaian/model-report-section'
 
 export default function AturanCapaianPage() {
   const [aturan, setAturan] = useState<AturanCapaian | null>(null)
@@ -67,7 +62,6 @@ export default function AturanCapaianPage() {
   const [savedAturanId, setSavedAturanId] = useState<string | null>(null)
   const [needsRetrain, setNeedsRetrain] = useState(false)
 
-  // Process dialog state
   const [processOpen, setProcessOpen] = useState(false)
   const [processConfig, setProcessConfig] = useState<ProcessConfig | null>(null)
   const [processEvaluasi, setProcessEvaluasi] = useState<EvaluasiResult | null>(null)
@@ -129,7 +123,7 @@ export default function AturanCapaianPage() {
   }, [])
 
   useEffect(() => {
-    loadData()
+    void loadData()
   }, [loadData])
 
   const formIsDuplikat = useMemo(
@@ -235,7 +229,7 @@ export default function AturanCapaianPage() {
     }
   }
 
-  // ── Reset ─────────────────────────────────────────────────────────────────────
+  // ── Reset ────────────────────────────────────────────────────────────────────
 
   async function eksekusiReset() {
     setActiveModal(null)
@@ -306,7 +300,7 @@ export default function AturanCapaianPage() {
     }
   }
 
-  // ── Latih ulang ───────────────────────────────────────────────────────────────
+  // ── Latih ulang ──────────────────────────────────────────────────────────────
 
   async function eksekusiLatihUlang(fromModal?: ModalType) {
     if (fromModal) setActiveModal(null)
@@ -413,7 +407,7 @@ export default function AturanCapaianPage() {
     }
   }
 
-  // ── Hapus ─────────────────────────────────────────────────────────────────────
+  // ── Hapus ────────────────────────────────────────────────────────────────────
 
   async function eksekusiDelete() {
     if (!selectedRiwayat) return
@@ -482,7 +476,7 @@ export default function AturanCapaianPage() {
     }
   }
 
-  // ── Set aktif ─────────────────────────────────────────────────────────────────
+  // ── Set aktif ────────────────────────────────────────────────────────────────
 
   async function eksekusiSetAktif() {
     if (!selectedRiwayat) return
@@ -631,7 +625,7 @@ export default function AturanCapaianPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ── Form ──────────────────────── */}
+          {/* ── Form & Laporan ──────────────────────── */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">Parameter Batas</h2>
@@ -728,27 +722,11 @@ export default function AturanCapaianPage() {
               </button>
             </div>
 
-            {/* Hasil evaluasi */}
-            {evaluasi && (
-              <div className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
-                <div className="flex items-center gap-2 mb-4">
-                  <IconChartPie size={16} className="text-emerald-600" />
-                  <h3 className="text-sm font-semibold text-foreground">Hasil Evaluasi Model</h3>
-                  <span className="text-xs font-mono text-muted-foreground ml-auto">
-                    {evaluasi.versi}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <MetricCard label="Akurasi" value={evaluasi.akurasi} color="text-emerald-600" />
-                  <MetricCard label="Precision" value={evaluasi.precision} color="text-blue-600" />
-                  <MetricCard label="Recall" value={evaluasi.recall} color="text-purple-600" />
-                  <MetricCard label="F1-Score" value={evaluasi.f1} color="text-amber-600" />
-                </div>
-                <p className="text-xs text-muted-foreground mt-3 text-center">
-                  {evaluasi.berhasil} santri berhasil diklasifikasi ulang
-                </p>
-              </div>
-            )}
+            {/* ── Model Report Section (menggantikan MetricCard lama) ── */}
+            <ModelReportSection
+              latestEvaluasi={evaluasi}
+              modelVersi={aturan?.model_versi ?? undefined}
+            />
           </div>
 
           {/* ── Sidebar ──────────────────── */}
@@ -789,11 +767,7 @@ export default function AturanCapaianPage() {
                     </h4>
                     {[
                       { label: 'Akurasi', value: aturan.model_akurasi, color: 'text-emerald-600' },
-                      {
-                        label: 'Precision',
-                        value: aturan.model_precision,
-                        color: 'text-blue-600',
-                      },
+                      { label: 'Precision', value: aturan.model_precision, color: 'text-blue-600' },
                       { label: 'Recall', value: aturan.model_recall, color: 'text-purple-600' },
                       { label: 'F1-Score', value: aturan.model_f1, color: 'text-amber-600' },
                     ].map(({ label, value, color }) => (
@@ -867,7 +841,7 @@ export default function AturanCapaianPage() {
         </div>
       </div>
 
-      {/* ══ Process Dialog (shared) ══ */}
+      {/* ══ Process Dialog ══ */}
       <ProcessDialog
         open={processOpen}
         config={processConfig}

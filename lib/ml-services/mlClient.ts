@@ -3,6 +3,7 @@
  */
 
 const ML_SERVICE_URL = process.env.NEXT_PUBLIC_ML_SERVICE_URL
+export const mlBaseUrl = ML_SERVICE_URL
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
