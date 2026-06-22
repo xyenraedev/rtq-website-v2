@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
 import {
   IconUsers,
@@ -13,16 +13,20 @@ import {
   IconAlertTriangle,
   IconEye,
   IconBookmark,
-  IconTrendingUp,
-  IconAlertCircle,
   IconCalendar,
   IconMapPin,
-  IconBrain,
   IconClock,
   IconRotateClockwise,
   IconStepInto,
   IconHistory,
   IconX,
+  IconSearch,
+  IconFilter,
+  IconAlertCircle,
+  IconGenderBigender,
+  IconCake,
+  IconHourglass,
+  IconUserCheck,
 } from '@tabler/icons-react'
 import {
   fetchSantriList,
@@ -42,8 +46,8 @@ import type {
 } from '@/lib/types'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { DataTable, type ColumnDef } from '@/components/data-table'
-import { useRef } from 'react'
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 type DurasiKey =
   | 'durasi_jilid_0'
@@ -54,12 +58,19 @@ type DurasiKey =
   | 'durasi_jilid_5'
   | 'durasi_jilid_6'
 
+type JenisKelaminFilter = 'L' | 'P' | ''
+type UsiaFilter = '' | 'anak' | 'remaja' | 'dewasa'
+type SortKey = 'nama' | 'jilid_saat_ini' | 'usia' | 'lama_belajar' | 'created_at'
+type SortDir = 'asc' | 'desc' | null
+
+// ─── Konstanta ──────────────────────────────────────────────────────────────
+
 const EMPTY_FORM: SantriFormData = {
   nama: '',
   tanggal_lahir: '',
   alamat: '',
   jenis_kelamin: 'L',
-  jilid_saat_ini: 1,
+  jilid_saat_ini: 0,
   total_pengulangan_taskih: 0,
   durasi_jilid_0: '',
   durasi_jilid_1: '',
@@ -69,6 +80,8 @@ const EMPTY_FORM: SantriFormData = {
   durasi_jilid_5: '',
   durasi_jilid_6: '',
 }
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function jilidLabel(n: number) {
   return n === 7 ? 'Al-Quran' : `Jilid ${n}`
@@ -82,6 +95,63 @@ function formatDate(iso: string | null | undefined, withTime = false) {
     year: 'numeric',
     ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
   })
+}
+
+function formatDurasiBulan(durasi: number): string {
+  const totalHari = Math.round(durasi * 30)
+
+  const tahun = Math.floor(totalHari / 360)
+  const sisaHari = totalHari % 360
+
+  const bulan = Math.floor(sisaHari / 30)
+  const hari = sisaHari % 30
+
+  const parts: string[] = []
+
+  if (tahun > 0) parts.push(`${tahun} th`)
+  if (bulan > 0) parts.push(`${bulan} bln`)
+  if (hari > 0) parts.push(`${hari} hr`)
+
+  return parts.length ? parts.join(' ') : '0 hr'
+}
+
+function hitungUsia(tanggalLahir: string | null | undefined): number | null {
+  if (!tanggalLahir) return null
+  const lahir = new Date(tanggalLahir)
+  if (Number.isNaN(lahir.getTime())) return null
+  const now = new Date()
+  let usia = now.getFullYear() - lahir.getFullYear()
+  const belumUlangTahun =
+    now.getMonth() < lahir.getMonth() ||
+    (now.getMonth() === lahir.getMonth() && now.getDate() < lahir.getDate())
+  if (belumUlangTahun) usia--
+  return usia
+}
+
+function kategoriUsia(usia: number | null): UsiaFilter {
+  if (usia == null) return ''
+  if (usia <= 12) return 'anak'
+  if (usia <= 17) return 'remaja'
+  return 'dewasa'
+}
+
+function kategoriUsiaLabel(k: UsiaFilter) {
+  if (k === 'anak') return 'Anak (≤12 th)'
+  if (k === 'remaja') return 'Remaja (13–17 th)'
+  if (k === 'dewasa') return 'Dewasa (18+ th)'
+  return ''
+}
+
+function hitungLamaBelajarBulan(s: SantriDenganRekomendasi): number {
+  if (!s.created_at) return 0
+
+  const mulai = new Date(s.created_at)
+  const sekarang = new Date()
+
+  const selisihMs = sekarang.getTime() - mulai.getTime()
+  const selisihHari = selisihMs / (1000 * 60 * 60 * 24)
+
+  return Number((selisihHari / 30).toFixed(2))
 }
 
 function santriToForm(s: SantriDenganRekomendasi): SantriFormData {
@@ -102,23 +172,22 @@ function santriToForm(s: SantriDenganRekomendasi): SantriFormData {
   }
 }
 
-function StatusBadge({ status }: { status: 'BBK' | 'TBBK' | null }) {
-  if (!status)
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
-        Belum
-      </span>
-    )
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
+function GenderBadge({ jk }: { jk: 'L' | 'P' | null }) {
+  if (!jk) return <span className="text-xs text-muted-foreground">—</span>
   return (
-    <span
-      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-        status === 'BBK'
-          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-      }`}
-    >
-      {status === 'BBK' ? <IconAlertTriangle size={10} /> : <IconCheck size={10} />}
-      {status}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium`}>
+      {jk === 'L' ? 'Laki-laki' : 'Perempuan'}
+    </span>
+  )
+}
+
+function JilidBadge({ jilid }: { jilid: number }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-semibold whitespace-nowrap">
+      <IconBookmark size={10} />
+      {jilidLabel(jilid)}
     </span>
   )
 }
@@ -145,6 +214,13 @@ function StatCard({
       </div>
     </div>
   )
+}
+
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <span className="text-muted-foreground/30 text-[10px]">⇕</span>
+  if (dir === 'asc') return <span className="text-primary text-[10px]">▲</span>
+  if (dir === 'desc') return <span className="text-primary text-[10px]">▼</span>
+  return <span className="text-muted-foreground/30 text-[10px]">⇕</span>
 }
 
 function ConfirmModal({
@@ -206,6 +282,8 @@ function ConfirmModal({
   )
 }
 
+// ─── Form Tambah / Edit Santri ──────────────────────────────────────────────
+
 function SantriForm({
   initial,
   progressList,
@@ -245,8 +323,8 @@ function SantriForm({
     try {
       if (isEdit) {
         const { klasifikasi } = await updateSantri(initial!.id, form)
-        toast.success(`Data diperbarui. Status: ${klasifikasi.status}`, {
-          description: 'Klasifikasi ulang telah dijalankan.',
+        toast.success(`Data identitas diperbarui. Status: ${klasifikasi.status}`, {
+          description: 'Klasifikasi ulang otomatis telah dijalankan di latar belakang.',
         })
       } else {
         const { klasifikasi } = await insertSantri(form)
@@ -283,10 +361,10 @@ function SantriForm({
             </div>
             <div>
               <h2 className="font-semibold text-foreground">
-                {isEdit ? 'Edit Data Santri' : 'Tambah Santri Baru'}
+                {isEdit ? 'Edit Identitas Santri' : 'Tambah Santri Baru'}
               </h2>
               <p className="text-xs text-muted-foreground">
-                Klasifikasi BBK/TBBK otomatis setelah disimpan
+                Klasifikasi BBK/TBBK otomatis dijalankan setelah disimpan
               </p>
             </div>
           </div>
@@ -344,15 +422,19 @@ function SantriForm({
                 </select>
               </div>
               <div className="sm:col-span-2">
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
                   Alamat
                 </label>
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  Contoh: Ngurensiti RT 00 RW 00, Kec. Wedarijaksa, Kab. Pati
+                </p>
+
                 <textarea
                   name="alamat"
                   value={form.alamat}
                   onChange={handleChange}
                   rows={2}
-                  placeholder="Alamat tinggal santri"
+                  placeholder="Masukkan alamat lengkap"
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
@@ -539,7 +621,7 @@ function SantriForm({
               ) : (
                 <>
                   <IconCheck size={14} />
-                  Simpan & Klasifikasi
+                  Simpan Identitas
                 </>
               )}
             </button>
@@ -549,6 +631,8 @@ function SantriForm({
     </div>
   )
 }
+
+// ─── Detail Modal (identitas + riwayat progress) ────────────────────────────
 
 function DetailModal({
   santri,
@@ -574,7 +658,7 @@ function DetailModal({
   useEffect(() => {
     Promise.all([fetchRiwayatRekomendasi(santri.id), fetchRiwayatProgress(santri.id)])
       .then(([rek, prog]) => {
-        setRiwayat((rek as RiwayatItem[]).slice(0, 8))
+        setRiwayat((rek as RiwayatItem[]).slice(0, 5))
         setProgressList(prog as SantriProgress[])
       })
       .catch(() => {})
@@ -588,6 +672,8 @@ function DetailModal({
 
   const currentJilid = santri.jilid_saat_ini
   const jilidRows = Array.from({ length: currentJilid + 1 }, (_, i) => i)
+  const usia = hitungUsia(santri.tanggal_lahir)
+  const lamaBelajar = hitungLamaBelajarBulan(santri)
 
   return (
     <div
@@ -615,15 +701,13 @@ function DetailModal({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge status={santri.status_rekomendasi} />
-            <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
-              <IconX size={15} className="text-muted-foreground" />
-            </button>
-          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
+            <IconX size={15} className="text-muted-foreground" />
+          </button>
         </div>
 
         <div className="p-5 space-y-5">
+          {/* Identitas utama */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl bg-muted/40 px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
@@ -636,12 +720,19 @@ function DetailModal({
             </div>
             <div className="rounded-xl bg-muted/40 px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
+                <IconCake size={13} />
+                Usia
+              </div>
+              <p className="text-sm font-semibold text-foreground">
+                {usia != null ? `${usia} tahun` : '—'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-muted/40 px-3 py-2.5 col-span-2">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
                 <IconMapPin size={13} />
                 Alamat
               </div>
-              <p className="text-sm font-semibold text-foreground truncate">
-                {santri.alamat || '—'}
-              </p>
+              <p className="text-sm font-semibold text-foreground">{santri.alamat || '—'}</p>
             </div>
             <div className="rounded-xl bg-muted/40 px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
@@ -654,36 +745,14 @@ function DetailModal({
             </div>
             <div className="rounded-xl bg-muted/40 px-3 py-2.5">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-0.5">
-                <IconCalendar size={13} />
-                Terdaftar
+                <IconHourglass size={13} />
+                Lama Belajar
               </div>
-              <p className="text-sm font-semibold text-foreground">
-                {formatDate(santri.created_at)}
-              </p>
+              <p className="text-sm font-semibold text-foreground">{lamaBelajar} bln</p>
             </div>
           </div>
 
-          {santri.probabilitas != null && (
-            <div className="rounded-xl border border-border bg-muted/20 px-4 py-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-muted-foreground font-medium">
-                  Probabilitas Klasifikasi
-                </span>
-                <span className="text-sm font-bold text-foreground">
-                  {Math.round(santri.probabilitas * 100)}%
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    santri.status_rekomendasi === 'BBK' ? 'bg-red-500' : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${Math.round(santri.probabilitas * 100)}%` }}
-                />
-              </div>
-            </div>
-          )}
-
+          {/* Riwayat progress jilid */}
           <div>
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <IconBook size={13} />
@@ -711,9 +780,6 @@ function DetailModal({
                       </th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
                         Selesai
-                      </th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                        Taskih
                       </th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
                         Status
@@ -747,7 +813,7 @@ function DetailModal({
                             </div>
                           </td>
                           <td className="px-3 py-2.5 text-foreground font-medium">
-                            {durasi != null ? `${durasi} bln` : '—'}
+                            {durasi != null ? formatDurasiBulan(durasi) : '—'}
                           </td>
                           <td className="px-3 py-2.5 text-muted-foreground">
                             {formatDate(prog?.tanggal_mulai)}
@@ -758,13 +824,6 @@ function DetailModal({
                             ) : (
                               formatDate(prog?.tanggal_selesai)
                             )}
-                          </td>
-                          <td className="px-3 py-2.5 text-foreground">
-                            {prog?.pengulangan_taskih != null
-                              ? `${prog.pengulangan_taskih}x`
-                              : isActive
-                                ? `${santri.total_pengulangan_taskih}x`
-                                : '—'}
                           </td>
                           <td className="px-3 py-2.5">
                             {isActive ? (
@@ -790,60 +849,38 @@ function DetailModal({
             )}
           </div>
 
-          {santri.alasan_rekomendasi && (
-            <div>
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <IconBrain size={13} />
-                Alasan Keputusan Model
-              </h3>
-              <pre className="text-xs text-foreground/80 bg-muted/40 border border-border/60 rounded-xl p-4 whitespace-pre-wrap font-mono leading-relaxed">
-                {santri.alasan_rekomendasi}
-              </pre>
-            </div>
-          )}
-
+          {/* Ringkasan klasifikasi terakhir — info sekilas saja, detail lengkap ada di Hasil Rekomendasi */}
           {riwayat.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
                 <IconHistory size={13} />
-                Riwayat Klasifikasi
+                Klasifikasi Terakhir
               </h3>
-              <div className="rounded-xl border border-border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/30">
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                        Tanggal
-                      </th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                        Status
-                      </th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                        Prob.
-                      </th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                        Sumber
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {riwayat.map((r, i) => (
-                      <tr key={r.id ?? i} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-3 py-2.5 text-muted-foreground">
-                          {formatDate(r.classified_at, true)}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <StatusBadge status={r.status} />
-                        </td>
-                        <td className="px-3 py-2.5 text-foreground font-medium">
-                          {r.probabilitas != null ? `${Math.round(r.probabilitas * 100)}%` : '—'}
-                        </td>
-                        <td className="px-3 py-2.5 text-muted-foreground">{r.sumber ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="rounded-xl border border-border bg-muted/20 px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {riwayat[0].status === 'BBK'
+                      ? 'Butuh Bimbingan Khusus'
+                      : 'Tidak Butuh Bimbingan Khusus'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formatDate(riwayat[0].classified_at, true)}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                    riwayat[0].status === 'BBK'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                  }`}
+                >
+                  {riwayat[0].status}
+                </span>
               </div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Lihat detail probabilitas & alasan klasifikasi lengkap di halaman{' '}
+                <span className="font-medium text-foreground">Hasil Rekomendasi</span>.
+              </p>
             </div>
           )}
         </div>
@@ -861,6 +898,8 @@ function DetailModal({
   )
 }
 
+// ─── Main Page ──────────────────────────────────────────────────────────────
+
 export default function MonitoringSantriPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -868,15 +907,25 @@ export default function MonitoringSantriPage() {
   const [santriList, setSantriList] = useState<SantriDenganRekomendasi[]>([])
   const [stats, setStats] = useState<MonitoringStats | null>(null)
   const [loading, setLoading] = useState(true)
-
   const [isAdmin, setIsAdmin] = useState(false)
 
+  // Modal states
   const [showForm, setShowForm] = useState(false)
   const [editSantri, setEditSantri] = useState<SantriDenganRekomendasi | null>(null)
   const [editProgressList, setEditProgressList] = useState<SantriProgress[]>([])
   const [detailSantri, setDetailSantri] = useState<SantriDenganRekomendasi | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; nama: string } | null>(null)
   const [confirmReklas, setConfirmReklas] = useState<{ id: string; nama: string } | null>(null)
+
+  // Filter & sort states — fokus identitas, BUKAN status klasifikasi
+  const [search, setSearch] = useState('')
+  const [filterJilid, setFilterJilid] = useState<number | ''>('')
+  const [filterJenisKelamin, setFilterJenisKelamin] = useState<JenisKelaminFilter>('')
+  const [filterUsia, setFilterUsia] = useState<UsiaFilter>('')
+  const [sortKey, setSortKey] = useState<SortKey | null>('nama')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  // ── Load data ──────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -947,135 +996,118 @@ export default function MonitoringSantriPage() {
     }
   }
 
-  const columns: ColumnDef<SantriDenganRekomendasi>[] = [
-    {
-      key: 'nama',
-      header: 'Nama',
-      sortable: true,
-      cell: (row) => (
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
-            {row.nama.charAt(0)}
-          </div>
-          <div>
-            <p className="font-medium text-foreground text-sm">{row.nama}</p>
-            <p className="text-xs text-muted-foreground">
-              {row.jenis_kelamin === 'L'
-                ? 'Laki-laki'
-                : row.jenis_kelamin === 'P'
-                  ? 'Perempuan'
-                  : '—'}
-            </p>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'jilid_saat_ini',
-      header: 'Jilid',
-      sortable: true,
-      cell: (row) => (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-semibold">
-          <IconBookmark size={10} />
-          {jilidLabel(row.jilid_saat_ini)}
-        </span>
-      ),
-    },
-    {
-      key: 'total_pengulangan_taskih',
-      header: 'Taskih',
-      sortable: true,
-      cell: (row) => (
-        <span className="text-sm font-medium text-foreground">{row.total_pengulangan_taskih}x</span>
-      ),
-    },
-    {
-      key: 'status_rekomendasi',
-      header: 'Status',
-      sortable: true,
-      cell: (row) => <StatusBadge status={row.status_rekomendasi} />,
-    },
-    {
-      key: 'probabilitas',
-      header: 'Probabilitas',
-      cell: (row) =>
-        row.probabilitas != null ? (
-          <div className="flex items-center gap-2">
-            <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  row.status_rekomendasi === 'BBK' ? 'bg-red-500' : 'bg-emerald-500'
-                }`}
-                style={{ width: `${Math.round((row.probabilitas ?? 0) * 100)}%` }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {Math.round((row.probabilitas ?? 0) * 100)}%
-            </span>
-          </div>
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        ),
-    },
-    {
-      key: 'created_at',
-      header: 'Terdaftar',
-      sortable: true,
-      cell: (row) => (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-          <IconCalendar size={12} />
-          {formatDate(row.created_at)}
-        </span>
-      ),
-    },
-    {
-      key: 'id',
-      header: 'Aksi',
-      align: 'center',
-      cell: (row) => (
-        <div
-          className="flex items-center justify-center gap-1"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => setDetailSantri(row)}
-            className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-            title="Lihat detail"
-          >
-            <IconEye size={15} />
-          </button>
-          {isAdmin && (
-            <>
-              <button
-                onClick={() => openEdit(row)}
-                className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-                title="Edit"
-              >
-                <IconEdit size={15} />
-              </button>
-              <button
-                onClick={() => setConfirmReklas({ id: row.id, nama: row.nama })}
-                className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors"
-                title="Klasifikasi ulang"
-              >
-                <IconRotateClockwise size={15} />
-              </button>
-              <button
-                onClick={() => setConfirmDelete({ id: row.id, nama: row.nama })}
-                className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg text-muted-foreground hover:text-red-500 transition-colors"
-                title="Hapus"
-              >
-                <IconTrash size={15} />
-              </button>
-            </>
-          )}
-        </div>
-      ),
-    },
-  ]
+  // ── Sort handler ────────────────────────────────────────────────────────
+
+  function handleSort(key: SortKey) {
+    if (sortKey !== key) {
+      setSortKey(key)
+      setSortDir('asc')
+    } else if (sortDir === 'asc') {
+      setSortDir('desc')
+    } else if (sortDir === 'desc') {
+      setSortKey(null)
+      setSortDir(null)
+    } else {
+      setSortDir('asc')
+    }
+  }
+
+  function resetFilters() {
+    setSearch('')
+    setFilterJilid('')
+    setFilterJenisKelamin('')
+    setFilterUsia('')
+    setSortKey('nama')
+    setSortDir('asc')
+  }
+
+  const isFiltered =
+    search !== '' ||
+    filterJilid !== '' ||
+    filterJenisKelamin !== '' ||
+    filterUsia !== '' ||
+    (sortKey !== 'nama' && sortKey !== null) ||
+    sortDir !== 'asc'
+
+  // ── Derivasi data: usia & lama belajar dihitung di client ──────────────
+
+  const enriched = useMemo(
+    () =>
+      santriList.map((s) => ({
+        ...s,
+        _usia: hitungUsia(s.tanggal_lahir),
+        _lamaBelajar: hitungLamaBelajarBulan(s),
+      })),
+    [santriList]
+  )
+
+  // ── Filtering ────────────────────────────────────────────────────────────
+
+  const filtered = useMemo(() => {
+    return enriched.filter((s) => {
+      if (search && !s.nama.toLowerCase().includes(search.toLowerCase())) return false
+      if (filterJilid !== '' && s.jilid_saat_ini !== filterJilid) return false
+      if (filterJenisKelamin && s.jenis_kelamin !== filterJenisKelamin) return false
+      if (filterUsia && kategoriUsia(s._usia) !== filterUsia) return false
+      return true
+    })
+  }, [enriched, search, filterJilid, filterJenisKelamin, filterUsia])
+
+  // ── Sorting ──────────────────────────────────────────────────────────────
+
+  const sorted = useMemo(() => {
+    if (!sortKey || !sortDir) return filtered
+    const arr = [...filtered]
+    arr.sort((a, b) => {
+      let va: string | number | null = null
+      let vb: string | number | null = null
+      switch (sortKey) {
+        case 'nama':
+          va = a.nama
+          vb = b.nama
+          break
+        case 'jilid_saat_ini':
+          va = a.jilid_saat_ini
+          vb = b.jilid_saat_ini
+          break
+        case 'usia':
+          va = a._usia
+          vb = b._usia
+          break
+        case 'lama_belajar':
+          va = a._lamaBelajar
+          vb = b._lamaBelajar
+          break
+        case 'created_at':
+          va = a.created_at ? new Date(a.created_at).getTime() : 0
+          vb = b.created_at ? new Date(b.created_at).getTime() : 0
+          break
+      }
+      if (va == null && vb == null) return 0
+      if (va == null) return 1
+      if (vb == null) return -1
+      if (typeof va === 'string' && typeof vb === 'string') {
+        return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
+      }
+      return sortDir === 'asc' ? (va as number) - (vb as number) : (vb as number) - (va as number)
+    })
+    return arr
+  }, [filtered, sortKey, sortDir])
+
+  // ── Jilid options untuk filter (dinamis sesuai data) ────────────────────
+
+  const jilidOptions = useMemo(() => {
+    const set = new Set(santriList.map((s) => s.jilid_saat_ini))
+    return Array.from(set).sort((a, b) => a - b)
+  }, [santriList])
+
+  const thClass =
+    'px-4 py-3 text-left text-xs font-semibold text-muted-foreground select-none cursor-pointer hover:text-foreground transition-colors'
+  const thInner = 'flex items-center gap-1.5'
 
   return (
     <div className="min-h-screen bg-background p-3 sm:p-6 space-y-6">
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -1083,7 +1115,7 @@ export default function MonitoringSantriPage() {
             Monitoring Santri
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Kelola data santri dan klasifikasi BBK/TBBK otomatis
+            Data identitas, capaian jilid, dan progress belajar seluruh santri
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1111,6 +1143,7 @@ export default function MonitoringSantriPage() {
         </div>
       </div>
 
+      {/* ── Stats — fokus identitas/populasi, bukan status klasifikasi ──── */}
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
@@ -1120,50 +1153,301 @@ export default function MonitoringSantriPage() {
             color="bg-primary"
           />
           <StatCard
-            label="BBK"
-            value={stats.bbk_count}
-            icon={IconAlertTriangle}
-            color="bg-red-500"
+            label="Laki-laki"
+            value={santriList.filter((s) => s.jenis_kelamin === 'L').length}
+            icon={IconGenderBigender}
+            color="bg-blue-500"
           />
-          <StatCard label="TBBK" value={stats.tbbk_count} icon={IconCheck} color="bg-emerald-500" />
           <StatCard
-            label="Rata-rata Durasi"
-            value={`${stats.rata_rata_durasi} bln`}
-            icon={IconTrendingUp}
+            label="Perempuan"
+            value={santriList.filter((s) => s.jenis_kelamin === 'P').length}
+            icon={IconGenderBigender}
+            color="bg-pink-500"
+          />
+          <StatCard
+            label="Belum Diklasifikasi"
+            value={stats.belum_diklasifikasi}
+            icon={IconAlertCircle}
             color="bg-amber-500"
           />
         </div>
       )}
 
-      <DataTable<SantriDenganRekomendasi>
-        data={santriList}
-        columns={columns}
-        rowKey="id"
-        pageSize={10}
-        searchFields={['nama']}
-        searchPlaceholder="Cari nama santri..."
-        selectable={isAdmin}
-        onBulkDelete={
-          isAdmin
-            ? async (keys) => {
-                const ids = keys as string[]
-                try {
-                  await Promise.all(ids.map((id) => deleteSantri(id)))
-                  setSantriList((prev) => prev.filter((s) => !ids.includes(s.id)))
-                  toast.success(`${ids.length} santri berhasil dihapus`)
-                } catch (err: unknown) {
-                  toast.error((err as Error).message ?? 'Gagal menghapus')
+      {/* ── Filter bar ───────────────────────────────────────────────────── */}
+      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="relative flex-1 w-full">
+            <IconSearch
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari nama santri..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <IconFilter size={14} className="text-muted-foreground" />
+              <select
+                value={filterJilid}
+                onChange={(e) =>
+                  setFilterJilid(e.target.value === '' ? '' : Number(e.target.value))
                 }
-              }
-            : undefined
-        }
-        emptyMessage="Belum ada data santri."
-        toolbarExtra={
-          <span className="text-xs text-muted-foreground">
-            Total <span className="font-semibold text-foreground">{santriList.length}</span> santri
-          </span>
-        }
-      />
+                className="px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="">Semua Jilid</option>
+                {jilidOptions.map((j) => (
+                  <option key={j} value={j}>
+                    {jilidLabel(j)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <select
+              value={filterJenisKelamin}
+              onChange={(e) => setFilterJenisKelamin(e.target.value as JenisKelaminFilter)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">Semua Gender</option>
+              <option value="L">Laki-laki</option>
+              <option value="P">Perempuan</option>
+            </select>
+
+            <select
+              value={filterUsia}
+              onChange={(e) => setFilterUsia(e.target.value as UsiaFilter)}
+              className="px-3 py-2.5 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">Semua Usia</option>
+              <option value="anak">{kategoriUsiaLabel('anak')}</option>
+              <option value="remaja">{kategoriUsiaLabel('remaja')}</option>
+              <option value="dewasa">{kategoriUsiaLabel('dewasa')}</option>
+            </select>
+
+            {isFiltered && (
+              <button
+                onClick={resetFilters}
+                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-border bg-background text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <IconRotateClockwise size={14} />
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isFiltered && (
+          <p className="text-xs text-muted-foreground">
+            Menampilkan <span className="font-semibold text-foreground">{sorted.length}</span> dari{' '}
+            {santriList.length} santri
+          </p>
+        )}
+      </div>
+
+      {/* ── Tabel identitas santri ───────────────────────────────────────── */}
+      <div className="bg-card rounded-xl border border-border overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground w-10">
+                  No
+                </th>
+                <th className={thClass} onClick={() => handleSort('nama')}>
+                  <div className={thInner}>
+                    Nama
+                    <SortIcon
+                      active={sortKey === 'nama'}
+                      dir={sortKey === 'nama' ? sortDir : null}
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">
+                  Gender
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">
+                  Tanggal Lahir
+                </th>
+                <th className={thClass} onClick={() => handleSort('usia')}>
+                  <div className={thInner}>
+                    Usia
+                    <SortIcon
+                      active={sortKey === 'usia'}
+                      dir={sortKey === 'usia' ? sortDir : null}
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">
+                  Alamat
+                </th>
+                <th className={thClass} onClick={() => handleSort('jilid_saat_ini')}>
+                  <div className={thInner}>
+                    Jilid
+                    <SortIcon
+                      active={sortKey === 'jilid_saat_ini'}
+                      dir={sortKey === 'jilid_saat_ini' ? sortDir : null}
+                    />
+                  </div>
+                </th>
+                <th className={thClass} onClick={() => handleSort('lama_belajar')}>
+                  <div className={thInner}>
+                    Lama Belajar
+                    <SortIcon
+                      active={sortKey === 'lama_belajar'}
+                      dir={sortKey === 'lama_belajar' ? sortDir : null}
+                    />
+                  </div>
+                </th>
+                <th className={thClass} onClick={() => handleSort('created_at')}>
+                  <div className={thInner}>
+                    Terdaftar
+                    <SortIcon
+                      active={sortKey === 'created_at'}
+                      dir={sortKey === 'created_at' ? sortDir : null}
+                    />
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">
+                  Aksi
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={i}>
+                    {Array.from({ length: 10 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 bg-muted animate-pulse rounded" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : sorted.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-14 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <IconUsers size={32} className="text-muted-foreground/40" />
+                      <p className="text-muted-foreground text-sm">
+                        {isFiltered
+                          ? 'Tidak ada santri yang cocok dengan filter'
+                          : 'Belum ada data santri'}
+                      </p>
+                      {isFiltered && (
+                        <button
+                          onClick={resetFilters}
+                          className="text-primary text-xs underline mt-1"
+                        >
+                          Reset filter
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                sorted.map((row, idx) => (
+                  <tr key={row.id} className="transition-colors hover:bg-muted/30">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{idx + 1}</td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                          {row.nama.charAt(0)}
+                        </div>
+                        <span className="font-medium text-foreground">{row.nama}</span>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <GenderBadge jk={row.jenis_kelamin as 'L' | 'P' | null} />
+                    </td>
+
+                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {formatDate(row.tanggal_lahir)}
+                    </td>
+
+                    <td className="px-4 py-3 text-sm text-foreground">
+                      {row._usia != null ? `${row._usia} th` : '—'}
+                    </td>
+
+                    <td className="px-4 py-3 text-xs text-muted-foreground max-w-45 truncate">
+                      {row.alamat || '—'}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <JilidBadge jilid={row.jilid_saat_ini} />
+                    </td>
+
+                    <td className="px-4 py-3 text-sm text-foreground whitespace-nowrap">
+                      {row._lamaBelajar != null ? formatDurasiBulan(row._lamaBelajar) : '—'}
+                    </td>
+
+                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                      {formatDate(row.created_at)}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => setDetailSantri(row)}
+                          className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                          title="Lihat detail"
+                        >
+                          <IconEye size={15} />
+                        </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => openEdit(row)}
+                              className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                              title="Edit identitas"
+                            >
+                              <IconEdit size={15} />
+                            </button>
+                            <button
+                              onClick={() => setConfirmReklas({ id: row.id, nama: row.nama })}
+                              className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors"
+                              title="Klasifikasi ulang"
+                            >
+                              <IconRotateClockwise size={15} />
+                            </button>
+                            <button
+                              onClick={() => setConfirmDelete({ id: row.id, nama: row.nama })}
+                              className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg text-muted-foreground hover:text-red-500 transition-colors"
+                              title="Hapus"
+                            >
+                              <IconTrash size={15} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            Menampilkan <span className="font-semibold text-foreground">{sorted.length}</span> dari{' '}
+            {santriList.length} santri
+          </p>
+          {isFiltered && (
+            <button onClick={resetFilters} className="text-xs text-primary underline">
+              Reset semua filter
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Modals ─────────────────────────────────────────────────────── */}
 
       {isAdmin && showForm && (
         <SantriForm
@@ -1198,7 +1482,7 @@ export default function MonitoringSantriPage() {
           description="Model akan menjalankan ulang klasifikasi BBK/TBBK berdasarkan data progress aktif santri ini."
           confirmLabel="Ya, Jalankan"
           confirmClassName="bg-primary hover:bg-primary/90"
-          icon={<IconBrain size={22} className="text-amber-600 dark:text-amber-400" />}
+          icon={<IconUserCheck size={22} className="text-amber-600 dark:text-amber-400" />}
           onConfirm={handleReklasifikasi}
           onCancel={() => setConfirmReklas(null)}
         />

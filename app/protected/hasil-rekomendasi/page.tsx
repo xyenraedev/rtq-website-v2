@@ -79,6 +79,24 @@ function formatDate(iso: string | null) {
   })
 }
 
+function formatDurasiBulan(durasi: number): string {
+  const totalHari = Math.round(durasi * 30)
+
+  const tahun = Math.floor(totalHari / 360)
+  const sisaHari = totalHari % 360
+
+  const bulan = Math.floor(sisaHari / 30)
+  const hari = sisaHari % 30
+
+  const parts: string[] = []
+
+  if (tahun > 0) parts.push(`${tahun} th`)
+  if (bulan > 0) parts.push(`${bulan} bln`)
+  if (hari > 0) parts.push(`${hari} hr`)
+
+  return parts.length ? parts.join(' ') : '0 hr'
+}
+
 // ─── Sub-components ────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: StatusRekomendasi | null }) {
@@ -224,7 +242,7 @@ function DetailModal({ row, onClose }: { row: RekomendasiRow; onClose: () => voi
     {
       icon: <IconClock size={14} />,
       label: 'Durasi Jilid Aktif',
-      value: row.durasi_jilid_aktif != null ? `${row.durasi_jilid_aktif} bulan` : '—',
+      value: row.durasi_jilid_aktif != null ? formatDurasiBulan(row.durasi_jilid_aktif) : '—',
     },
     {
       icon: <IconRepeat size={14} />,
@@ -337,8 +355,8 @@ export default function HasilRekomendasiPage() {
   const [reklasLoading, setReklasLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<StatusRekomendasi | ''>('')
-  const [sortKey, setSortKey] = useState<SortKey | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>(null)
+  const [sortKey, setSortKey] = useState<SortKey | null>('status_rekomendasi')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [detailRow, setDetailRow] = useState<RekomendasiRow | null>(null)
   const [confirmReklas, setConfirmReklas] = useState(false)
   const [role, setRole] = useState<string | null>(null)
@@ -422,12 +440,12 @@ export default function HasilRekomendasiPage() {
   function resetAll() {
     setSearch('')
     setFilterStatus('')
-    setSortKey(null)
-    setSortDir(null)
+     setSortKey('status_rekomendasi')
+     setSortDir('asc')
   }
 
-  const isFiltered = search || filterStatus || sortKey
-
+const isFiltered =
+  search !== '' || filterStatus !== '' || sortKey !== 'status_rekomendasi' || sortDir !== 'asc'
   // ── Reklasifikasi ──────────────────────────────────────────────────────────
 
   async function handleReklasifikasiSemua() {
@@ -467,7 +485,7 @@ export default function HasilRekomendasiPage() {
       'Nama',
       'Jenis Kelamin',
       'Jilid',
-      'Durasi Aktif (bln)',
+      'Durasi Aktif',
       'Taskih Aktif',
       'Total Taskih',
       'Status',
@@ -916,7 +934,9 @@ export default function HasilRekomendasiPage() {
                       </td>
 
                       <td className="px-4 py-3 text-sm text-foreground">
-                        {row.durasi_jilid_aktif != null ? `${row.durasi_jilid_aktif} bln` : '—'}
+                        {row.durasi_jilid_aktif == null
+                          ? '—'
+                          : formatDurasiBulan(row.durasi_jilid_aktif)}{' '}
                       </td>
 
                       <td className="px-4 py-3 text-sm font-medium text-foreground">
