@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   mlKlasifikasi,
   mlKlasifikasiBatch,
+  type AturanLimits,
   type MLKlasifikasiInput,
 } from '@/lib/ml-services/mlClient'
 import { klasifikasiSantri } from '@/lib/ml-services/classifier'
@@ -128,6 +129,15 @@ async function fetchAturanAktif(): Promise<AturanCapaian> {
   return data as AturanCapaian
 }
 
+/** Konversi AturanCapaian (row Supabase) -> AturanLimits (kontrak ML Service) */
+function toAturanLimits(aturan: AturanCapaian): AturanLimits {
+  return {
+    batas_durasi_jilid_0_4: aturan.batas_durasi_jilid_0_4,
+    batas_durasi_jilid_5_6: aturan.batas_durasi_jilid_5_6,
+    batas_pengulangan_taskih: aturan.batas_pengulangan_taskih,
+  }
+}
+
 function buildKlasifikasiInput(progress: SantriProgress): MLKlasifikasiInput {
   const { jilid } = progress
   return {
@@ -147,12 +157,16 @@ type HasilDenganSumber = KlasifikasiResult & { sumber: 'decision-tree' | 'rule-b
 
 async function klasifikasiDenganFallback(progress: SantriProgress): Promise<HasilDenganSumber> {
   const input = buildKlasifikasiInput(progress)
+  const aturan = await fetchAturanAktif()
 
   try {
-    const hasil = await mlKlasifikasi(input)
+    // Aturan aktif WAJIB dikirim ke ML Service supaya status akhir
+    // (BBK/TBBK) dijamin sesuai aturan_capaian yang is_active=true
+    // saat ini, terlepas dari aturan apa yang dipakai waktu model
+    // terakhir dilatih.
+    const hasil = await mlKlasifikasi(input, toAturanLimits(aturan))
     return { ...hasil, sumber: 'decision-tree' }
   } catch {
-    const aturan = await fetchAturanAktif()
     const hasil = klasifikasiSantri(progress, aturan)
     return { ...hasil, sumber: 'rule-based' }
   }
@@ -348,10 +362,12 @@ export async function reklasifikasiBatch(santriIds: string[]): Promise<{
   if (error) throw error
 
   const list = (progressList ?? []) as SantriProgress[]
+  const aturan = await fetchAturanAktif()
 
   try {
     const batchInput = list.map((p) => ({ id: p.santri_id, ...buildKlasifikasiInput(p) }))
-    const batchResult = await mlKlasifikasiBatch(batchInput)
+    // Aturan aktif dikirim sekali untuk seluruh batch — sama untuk semua santri.
+    const batchResult = await mlKlasifikasiBatch(batchInput, toAturanLimits(aturan))
 
     const insertBatch = batchResult.hasil
       .filter((h) => h.success && h.status)
@@ -372,7 +388,6 @@ export async function reklasifikasiBatch(santriIds: string[]): Promise<{
 
     return { berhasil: batchResult.berhasil, gagal: batchResult.gagal }
   } catch {
-    const aturan = await fetchAturanAktif()
     let berhasil = 0
     let gagal = 0
 

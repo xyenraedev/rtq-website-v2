@@ -84,7 +84,7 @@ export async function resetAturanDefault(): Promise<AturanCapaian> {
     .select('*')
     .eq('batas_durasi_jilid_0_4', 3)
     .eq('batas_durasi_jilid_5_6', 4)
-    .eq('batas_pengulangan_taskih', 2)
+    .eq('batas_pengulangan_taskih', 3)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
@@ -100,7 +100,7 @@ export async function resetAturanDefault(): Promise<AturanCapaian> {
   return await simpanAturan({
     batas_durasi_jilid_0_4: 3,
     batas_durasi_jilid_5_6: 4,
-    batas_pengulangan_taskih: 2,
+    batas_pengulangan_taskih: 3,
   })
 }
 
@@ -196,7 +196,11 @@ export async function setAturanAktif(id: string): Promise<AturanCapaian> {
  * Latih ulang Decision Tree.
  *
  * Sumber data: tabel training_master yang sudah digenerate otomatis
- * oleh trigger saat aturan disimpan.
+ * oleh trigger saat aturan disimpan. Skema training_master sekarang
+ * menyimpan histori durasi jilid_0..jilid_6 sekaligus per row (1 row
+ * = 1 santri simulasi), bukan snapshot 1 jilid per row, agar fitur
+ * rata_rata_durasi/total_durasi/jumlah_jilid_diambil di sisi ML tidak
+ * jadi duplikat trivial dari durasi jilid aktif saja.
  */
 export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult> {
   const supabase = getClient()
@@ -210,10 +214,25 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
 
   if (aErr) throw new Error('Aturan tidak ditemukan')
 
-  // Ambil data training dari tabel master
+  // Guard: peringatkan kalau aturan yang dilatih bukan aturan yang
+  // sedang aktif. Tidak diblok total (mungkin sengaja melatih riwayat
+  // lama), tapi caller harus sadar — ini sumber bug "evaluasi tidak
+  // sesuai aturan aktif" kalau dipanggil tanpa sengaja pada id lama.
+  if (!aturan.is_active) {
+    console.warn(
+      `[latihUlangModel] Melatih aturan_id=${aturanId} yang TIDAK is_active. ` +
+        'Model hasil training ini tidak akan dipakai sebagai acuan klasifikasi ' +
+        'sampai aturan ini diaktifkan lewat setAturanAktif().'
+    )
+  }
+
+  // Ambil data training dari tabel master (skema baru: histori per jilid)
   const { data: trainingData, error: tErr } = await supabase
     .from('training_master')
-    .select('jilid, durasi_bulan, pengulangan_taskih, label')
+    .select(
+      'jilid_saat_ini, durasi_jilid_0, durasi_jilid_1, durasi_jilid_2, durasi_jilid_3, ' +
+        'durasi_jilid_4, durasi_jilid_5, durasi_jilid_6, total_pengulangan_taskih, label'
+    )
     .eq('aturan_id', aturanId)
 
   if (tErr) throw tErr
@@ -222,24 +241,32 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
     throw new Error('Data training belum tersedia. Coba simpan ulang aturan capaian.')
   }
 
-  // Bangun data latih untuk ML Service
+  // Bangun data latih untuk ML Service — sekarang langsung 1:1 dengan
+  // kolom tabel, tidak perlu trik "row.jilid === i ? x : null" lagi
+  // karena histori semua jilid sudah tersimpan per row.
   const dataLatih = (
-    trainingData as Array<{
-      jilid: number
-      durasi_bulan: number
-      pengulangan_taskih: number
+    trainingData as unknown as Array<{
+      jilid_saat_ini: number
+      durasi_jilid_0: number
+      durasi_jilid_1: number
+      durasi_jilid_2: number
+      durasi_jilid_3: number
+      durasi_jilid_4: number
+      durasi_jilid_5: number
+      durasi_jilid_6: number
+      total_pengulangan_taskih: number
       label: 'BBK' | 'TBBK'
     }>
   ).map((row) => ({
-    jilid_saat_ini: row.jilid,
-    total_pengulangan_taskih: row.pengulangan_taskih,
-    durasi_jilid_0: row.jilid === 0 ? row.durasi_bulan : null,
-    durasi_jilid_1: row.jilid === 1 ? row.durasi_bulan : null,
-    durasi_jilid_2: row.jilid === 2 ? row.durasi_bulan : null,
-    durasi_jilid_3: row.jilid === 3 ? row.durasi_bulan : null,
-    durasi_jilid_4: row.jilid === 4 ? row.durasi_bulan : null,
-    durasi_jilid_5: row.jilid === 5 ? row.durasi_bulan : null,
-    durasi_jilid_6: row.jilid === 6 ? row.durasi_bulan : null,
+    jilid_saat_ini: row.jilid_saat_ini,
+    total_pengulangan_taskih: row.total_pengulangan_taskih,
+    durasi_jilid_0: row.durasi_jilid_0,
+    durasi_jilid_1: row.durasi_jilid_1,
+    durasi_jilid_2: row.durasi_jilid_2,
+    durasi_jilid_3: row.durasi_jilid_3,
+    durasi_jilid_4: row.durasi_jilid_4,
+    durasi_jilid_5: row.durasi_jilid_5,
+    durasi_jilid_6: row.durasi_jilid_6,
     label: row.label,
   }))
 
@@ -274,4 +301,17 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
     versi: evaluasi.versi,
     berhasil: evaluasi.berhasil,
   }
+}
+
+/**
+ * Latih ulang Decision Tree untuk aturan yang SEDANG AKTIF saat ini.
+ * Pakai ini sebagai default di UI ("Latih Ulang Model") supaya tidak ada
+ * celah salah kirim aturanId yang sudah tidak is_active.
+ */
+export async function latihUlangModelAktif(): Promise<EvaluasiResult> {
+  const aturanAktif = await fetchAturanAktif()
+  if (!aturanAktif) {
+    throw new Error('Tidak ada aturan capaian yang aktif (is_active=true).')
+  }
+  return latihUlangModel(aturanAktif.id)
 }

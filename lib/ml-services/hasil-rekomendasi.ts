@@ -3,7 +3,7 @@
  */
 
 import { createClient } from '@/lib/supabase/client'
-import { mlKlasifikasiBatch } from '@/lib/ml-services/mlClient'
+import { mlKlasifikasiBatch, type AturanLimits } from '@/lib/ml-services/mlClient'
 import { klasifikasiSantri } from '@/lib/ml-services/classifier'
 import type { AturanCapaian, SantriProgress, StatusRekomendasi } from '@/lib/types'
 
@@ -113,6 +113,15 @@ async function fetchAturanAktif(): Promise<AturanCapaian> {
   return data as AturanCapaian
 }
 
+/** Konversi AturanCapaian (row Supabase) -> AturanLimits (kontrak ML Service) */
+function toAturanLimits(aturan: AturanCapaian): AturanLimits {
+  return {
+    batas_durasi_jilid_0_4: aturan.batas_durasi_jilid_0_4,
+    batas_durasi_jilid_5_6: aturan.batas_durasi_jilid_5_6,
+    batas_pengulangan_taskih: aturan.batas_pengulangan_taskih,
+  }
+}
+
 export async function reklasifikasiSemua(): Promise<{ berhasil: number; gagal: number }> {
   const supabase = getClient()
 
@@ -125,22 +134,26 @@ export async function reklasifikasiSemua(): Promise<{ berhasil: number; gagal: n
   if (!progressList || progressList.length === 0) return { berhasil: 0, gagal: 0 }
 
   const list = progressList as SantriProgress[]
+  const aturan = await fetchAturanAktif()
+
+  const batchInput = list.map((p) => ({
+    id: p.santri_id,
+    jilid_saat_ini: p.jilid,
+    total_pengulangan_taskih: p.pengulangan_taskih,
+    durasi_jilid_0: p.jilid === 0 ? (p.durasi_bulan ?? null) : null,
+    durasi_jilid_1: p.jilid === 1 ? (p.durasi_bulan ?? null) : null,
+    durasi_jilid_2: p.jilid === 2 ? (p.durasi_bulan ?? null) : null,
+    durasi_jilid_3: p.jilid === 3 ? (p.durasi_bulan ?? null) : null,
+    durasi_jilid_4: p.jilid === 4 ? (p.durasi_bulan ?? null) : null,
+    durasi_jilid_5: p.jilid === 5 ? (p.durasi_bulan ?? null) : null,
+    durasi_jilid_6: p.jilid === 6 ? (p.durasi_bulan ?? null) : null,
+  }))
 
   try {
-    const batchInput = list.map((p) => ({
-      id: p.santri_id,
-      jilid_saat_ini: p.jilid,
-      total_pengulangan_taskih: p.pengulangan_taskih,
-      durasi_jilid_0: p.jilid === 0 ? (p.durasi_bulan ?? null) : null,
-      durasi_jilid_1: p.jilid === 1 ? (p.durasi_bulan ?? null) : null,
-      durasi_jilid_2: p.jilid === 2 ? (p.durasi_bulan ?? null) : null,
-      durasi_jilid_3: p.jilid === 3 ? (p.durasi_bulan ?? null) : null,
-      durasi_jilid_4: p.jilid === 4 ? (p.durasi_bulan ?? null) : null,
-      durasi_jilid_5: p.jilid === 5 ? (p.durasi_bulan ?? null) : null,
-      durasi_jilid_6: p.jilid === 6 ? (p.durasi_bulan ?? null) : null,
-    }))
-
-    const batchResult = await mlKlasifikasiBatch(batchInput)
+    // Aturan aktif WAJIB dikirim — tanpa ini ML Service akan diam-diam
+    // memakai aturan hasil training terakhir, yang bisa berbeda dari
+    // aturan_capaian yang sedang is_active=true di database.
+    const batchResult = await mlKlasifikasiBatch(batchInput, toAturanLimits(aturan))
 
     const insertBatch = batchResult.hasil
       .filter((h) => h.success && h.status)
@@ -160,9 +173,34 @@ export async function reklasifikasiSemua(): Promise<{ berhasil: number; gagal: n
     }
 
     return { berhasil: batchResult.berhasil, gagal: batchResult.gagal }
-  } catch {
-     console.error('ML Batch gagal:', pErr)
+  } catch (err) {
+    console.error('ML Batch gagal, fallback ke rule-based:', err)
 
-     throw new Error('ML Service gagal dihubungi')
+    // Fallback rule-based — sama seperti di santriService.ts, supaya
+    // reklasifikasi tetap jalan walau ML Service down, dan tetap
+    // dijamin sesuai aturan aktif karena rule murni baca dari `aturan`.
+    let berhasil = 0
+    let gagal = 0
+
+    for (const p of list) {
+      try {
+        const hasil = klasifikasiSantri(p, aturan)
+        const { error: insertErr } = await supabase.from('rekomendasi').insert({
+          santri_id: p.santri_id,
+          status: hasil.status,
+          alasan: hasil.alasan,
+          fitur_snapshot: hasil.fitur_snapshot,
+          probabilitas: hasil.probabilitas,
+          sumber: 'rule-based' as const,
+          model_versi: hasil.model_versi,
+        })
+        if (insertErr) throw insertErr
+        berhasil++
+      } catch {
+        gagal++
+      }
+    }
+
+    return { berhasil, gagal }
   }
 }

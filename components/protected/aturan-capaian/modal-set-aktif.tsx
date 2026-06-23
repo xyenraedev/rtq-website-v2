@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { AturanCapaian } from './types'
-import { namaModel } from './helpers'
+import { namaModel, formatPersen } from './helpers'
 
 interface ModalSetAktifProps {
   open: boolean
@@ -36,10 +36,11 @@ export function ModalSetAktif({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconPlayerPlay size={18} className="text-primary" />
-            Aktifkan Model Ini?
+            Aktifkan & Latih Ulang Model Ini?
           </DialogTitle>
           <DialogDescription>
-            Model berikut akan dijadikan aktif. Model aktif saat ini akan dinonaktifkan.
+            Model berikut akan dijadikan aktif, dilatih ulang, dan seluruh santri akan diklasifikasi
+            ulang. Model aktif saat ini akan dinonaktifkan.
           </DialogDescription>
         </DialogHeader>
 
@@ -48,11 +49,7 @@ export function ModalSetAktif({
             <p className="text-xs text-muted-foreground mb-1.5">Model yang akan diaktifkan:</p>
             <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl space-y-2">
               <p className="text-xs font-mono font-semibold text-primary break-all">
-                {namaModel(
-                  selectedRiwayat.batas_durasi_jilid_0_4,
-                  selectedRiwayat.batas_durasi_jilid_5_6,
-                  selectedRiwayat.batas_pengulangan_taskih
-                )}
+                {namaModel(selectedRiwayat.model_versi)}
               </p>
               <p className="text-xs text-muted-foreground">
                 Jilid 0–4: <strong>{selectedRiwayat.batas_durasi_jilid_0_4} bln</strong> · Jilid
@@ -60,21 +57,31 @@ export function ModalSetAktif({
                 <strong>{selectedRiwayat.batas_pengulangan_taskih}×</strong>
               </p>
               {selectedRiwayat.model_f1 != null ? (
-                <div className="flex flex-wrap gap-x-3 text-xs">
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span>
-                    F1:{' '}
-                    <strong className="text-amber-600">
-                      {Math.round(selectedRiwayat.model_f1 * 100)}%
+                    Akurasi:{' '}
+                    <strong className="text-emerald-600">
+                      {formatPersen(selectedRiwayat.model_akurasi)}
                     </strong>
                   </span>
-                  {selectedRiwayat.model_akurasi != null && (
-                    <span>
-                      Akurasi:{' '}
-                      <strong className="text-emerald-600">
-                        {Math.round(selectedRiwayat.model_akurasi * 100)}%
-                      </strong>
-                    </span>
-                  )}
+                  <span>
+                    Presisi:{' '}
+                    <strong className="text-foreground">
+                      {formatPersen(selectedRiwayat.model_precision)}
+                    </strong>
+                  </span>
+                  <span>
+                    Recall:{' '}
+                    <strong className="text-foreground">
+                      {formatPersen(selectedRiwayat.model_recall)}
+                    </strong>
+                  </span>
+                  <span>
+                    F1:{' '}
+                    <strong className="text-foreground">
+                      {formatPersen(selectedRiwayat.model_f1)}
+                    </strong>
+                  </span>
                 </div>
               ) : (
                 <p className="text-xs text-amber-600 flex items-center gap-1">
@@ -90,11 +97,7 @@ export function ModalSetAktif({
               <p className="text-xs text-muted-foreground mb-1.5">Menggantikan model aktif:</p>
               <div className="p-3 bg-muted/30 border border-border rounded-xl">
                 <p className="text-xs font-mono text-muted-foreground break-all">
-                  {namaModel(
-                    aturan.batas_durasi_jilid_0_4,
-                    aturan.batas_durasi_jilid_5_6,
-                    aturan.batas_pengulangan_taskih
-                  )}
+                  {namaModel(aturan.model_versi)}
                 </p>
               </div>
             </div>
@@ -103,13 +106,9 @@ export function ModalSetAktif({
           <div className="flex items-start gap-2 p-3 bg-muted/30 border border-border rounded-xl text-xs text-muted-foreground">
             <IconNetwork size={14} className="shrink-0 mt-0.5 text-primary" />
             <span>
-              Proses berjalan dalam{' '}
-              <strong className="text-foreground">
-                {selectedRiwayat.model_versi ? '5' : '4'} langkah
-              </strong>
-              {selectedRiwayat.model_versi
-                ? ': ambil data → nonaktifkan lama → aktifkan baru → reklasifikasi santri → refresh.'
-                : ': ambil data → nonaktifkan lama → aktifkan baru → refresh.'}
+              Proses berjalan dalam <strong className="text-foreground">6 langkah</strong>: ambil
+              data → nonaktifkan lama → aktifkan baru → latih ulang model → reklasifikasi santri →
+              refresh.
             </span>
           </div>
         </div>
@@ -120,7 +119,7 @@ export function ModalSetAktif({
           </Button>
           <Button onClick={onConfirm}>
             <IconPlayerPlay size={14} className="mr-1.5" />
-            Aktifkan & Lihat Proses
+            Aktifkan & Latih Ulang
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { DiffRow } from './diff-row'
 import { AturanCapaian, FormValues } from './types'
-import { namaModel } from './helpers'
+import { buatNamaModel } from './helpers'
 
 interface ModalSimpanProps {
   open: boolean
@@ -30,7 +30,7 @@ export function ModalSimpan({ open, onClose, onConfirm, aturan, formValues }: Mo
   const diffTaskih =
     aturan != null && aturan.batas_pengulangan_taskih !== formValues.batas_pengulangan_taskih
 
-  const namaModelBaru = namaModel(
+  const namaModelBaru = buatNamaModel(
     formValues.batas_durasi_jilid_0_4,
     formValues.batas_durasi_jilid_5_6,
     formValues.batas_pengulangan_taskih

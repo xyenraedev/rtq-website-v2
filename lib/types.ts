@@ -135,6 +135,17 @@ export interface SantriFormData {
 
 export interface KlasifikasiResult {
   status: StatusRekomendasi
+  /**
+   * Prediksi mentah Decision Tree sebelum ditimpa rule-based safety
+   * layer berdasarkan aturan capaian aktif. Hanya ada saat sumber =
+   * 'decision-tree'; klasifikasiSantri() (rule-based murni) tidak mengisi
+   * field ini karena tidak ada prediksi ML untuk dibandingkan.
+   */
+  status_ml?: StatusRekomendasi
+  /** true jika status_ml ditimpa oleh aturan aktif (rule-based override) */
+  override_rule?: boolean
+  /** true jika model belum dilatih ulang dengan aturan yang sedang aktif */
+  model_stale?: boolean
   alasan: string
   probabilitas: number
   model_versi: string

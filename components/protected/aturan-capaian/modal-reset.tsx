@@ -51,12 +51,12 @@ export function ModalReset({ open, onClose, onConfirm, aturan }: ModalResetProps
           <DiffRow
             label="Batas Taskih"
             before={`${aturan?.batas_pengulangan_taskih ?? '—'}×`}
-            after="2×"
-            changed={aturan?.batas_pengulangan_taskih !== 2}
+            after="3×"
+            changed={aturan?.batas_pengulangan_taskih !== 3}
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>
             Batal
           </Button>

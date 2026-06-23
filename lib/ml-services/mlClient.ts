@@ -19,10 +19,22 @@ export interface MLKlasifikasiInput {
   durasi_jilid_6?: number | null
 }
 
+export interface AturanLimits {
+  batas_durasi_jilid_0_4: number
+  batas_durasi_jilid_5_6: number
+  batas_pengulangan_taskih: number
+}
+
 export interface MLKlasifikasiResult {
   /** BBK = Butuh Bimbingan Khusus | TBBK = Tidak Butuh Bimbingan Khusus */
   status: 'TBBK' | 'BBK'
+  /** Prediksi mentah dari Decision Tree, sebelum ditimpa rule aturan aktif */
+  status_ml: 'TBBK' | 'BBK'
   probabilitas: number
+  /** true jika status_ml ditimpa oleh aturan aktif (rule-based override) */
+  override_rule: boolean
+  /** true jika model belum dilatih ulang dengan aturan yang sedang aktif */
+  model_stale: boolean
   alasan: string
   fitur_snapshot: Record<string, number>
   model_versi: string
@@ -140,22 +152,40 @@ export async function mlHealth(): Promise<MLHealthResult> {
   return mlFetch<MLHealthResult>('/health')
 }
 
-/** Klasifikasi satu santri */
-export async function mlKlasifikasi(input: MLKlasifikasiInput): Promise<MLKlasifikasiResult> {
+/**
+ * Klasifikasi satu santri.
+ *
+ * `aturan` WAJIB diisi dengan aturan_capaian yang sedang is_active=true
+ * (ambil lewat fetchAturanAktif() di pemanggil). Ini menjamin status
+ * akhir (BBK/TBBK) selalu konsisten dengan aturan aktif saat ini,
+ * terlepas dari aturan apa yang dipakai saat model terakhir dilatih.
+ */
+export async function mlKlasifikasi(
+  input: MLKlasifikasiInput,
+  aturan: AturanLimits
+): Promise<MLKlasifikasiResult> {
   validateInput(input)
   return mlFetch<MLKlasifikasiResult>('/klasifikasi', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, aturan }),
   })
 }
 
-/** Klasifikasi banyak santri sekaligus */
-export async function mlKlasifikasiBatch(santriList: MLBatchInput[]): Promise<MLBatchResult> {
+/**
+ * Klasifikasi banyak santri sekaligus.
+ *
+ * `aturan` WAJIB diisi dengan aturan_capaian yang sedang is_active=true,
+ * sama untuk seluruh santri dalam satu batch.
+ */
+export async function mlKlasifikasiBatch(
+  santriList: MLBatchInput[],
+  aturan: AturanLimits
+): Promise<MLBatchResult> {
   if (!Array.isArray(santriList)) throw new Error('santriList harus array')
   santriList.forEach(validateInput)
   return mlFetch<MLBatchResult>('/klasifikasi/batch', {
     method: 'POST',
-    body: JSON.stringify({ santri_list: santriList }),
+    body: JSON.stringify({ santri_list: santriList, aturan }),
   })
 }
 

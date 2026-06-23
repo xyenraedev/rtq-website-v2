@@ -24,33 +24,36 @@ export function SliderInput({
   onChange,
 }: SliderInputProps) {
   return (
-    <div className="p-4 bg-card rounded-xl border border-border space-y-3">
+    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">{label}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
         </div>
+
         <div className="text-right">
-          <span className="text-2xl font-bold text-primary">{value}</span>
-          <span className="text-xs text-muted-foreground ml-1">{unit}</span>
+          <span className="text-2xl font-bold text-primary">{Math.round(value)}</span>
+          {unit && <span className="ml-1 text-xs text-muted-foreground">{unit}</span>}
         </div>
       </div>
+
       <input
         type="range"
         name={name}
         min={min}
         max={max}
-        step={step}
-        value={value}
+        step={1}
+        value={Math.round(value)}
         onChange={(e) => onChange(name, Number(e.target.value))}
-        className="w-full h-2 rounded-full bg-muted appearance-none cursor-pointer accent-primary"
+        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
       />
+
       <div className="flex justify-between text-[10px] text-muted-foreground">
         <span>
-          {min} {unit}
+          {Math.round(min)} {unit}
         </span>
         <span>
-          {max} {unit}
+          {Math.round(max)} {unit}
         </span>
       </div>
     </div>

@@ -11,15 +11,12 @@ import {
   IconHistory,
   IconRotateClockwise,
   IconInfoCircle,
-  IconChartPie,
   IconTrash,
   IconDatabase,
   IconWand,
   IconX,
 } from '@tabler/icons-react'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/utils'
 import {
   type EvaluasiResult,
   fetchAturanAktif,
@@ -39,11 +36,9 @@ import type {
   ProcessStep,
   ProcessConfig,
 } from '@/components/protected/aturan-capaian/types'
-import { isDuplikat, namaModel } from '@/components/protected/aturan-capaian/helpers'
+import { isDuplikat, namaModel, formatPersen } from '@/components/protected/aturan-capaian/helpers'
 import { ModalDelete } from '@/components/protected/aturan-capaian/modal-delete'
 import { ModalDetail } from '@/components/protected/aturan-capaian/modal-detail'
-import { ModalLatih } from '@/components/protected/aturan-capaian/modal-latih'
-import { ModalPostSimpan } from '@/components/protected/aturan-capaian/modal-post-simpan'
 import { ModalReset } from '@/components/protected/aturan-capaian/modal-reset'
 import { ModalSetAktif } from '@/components/protected/aturan-capaian/modal-set-aktif'
 import { ModalSimpan } from '@/components/protected/aturan-capaian/modal-simpan'
@@ -51,6 +46,8 @@ import { ProcessDialog } from '@/components/protected/aturan-capaian/process-dia
 import { SliderInput } from '@/components/protected/aturan-capaian/slider-input'
 import { RiwayatCard } from '@/components/protected/aturan-capaian/riwayat-card'
 import { ModelReportSection } from '@/components/protected/aturan-capaian/model-report-section'
+import { Button } from '@/components/ui/button'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
 
 export default function AturanCapaianPage() {
   const [aturan, setAturan] = useState<AturanCapaian | null>(null)
@@ -59,13 +56,12 @@ export default function AturanCapaianPage() {
   const [evaluasi, setEvaluasi] = useState<EvaluasiResult | null>(null)
   const [activeModal, setActiveModal] = useState<ModalType>(null)
   const [selectedRiwayat, setSelectedRiwayat] = useState<AturanCapaian | null>(null)
-  const [savedAturanId, setSavedAturanId] = useState<string | null>(null)
-  const [needsRetrain, setNeedsRetrain] = useState(false)
 
   const [processOpen, setProcessOpen] = useState(false)
   const [processConfig, setProcessConfig] = useState<ProcessConfig | null>(null)
   const [processEvaluasi, setProcessEvaluasi] = useState<EvaluasiResult | null>(null)
   const processStepsRef = useRef<ProcessStep[]>([])
+  const [showAllModels, setShowAllModels] = useState(false)
 
   const sortedRiwayat = useMemo(() => {
     return [...riwayat].sort((a, b) => {
@@ -75,10 +71,12 @@ export default function AturanCapaianPage() {
     })
   }, [riwayat])
 
+  const displayedRiwayat = showAllModels ? sortedRiwayat : sortedRiwayat.slice(0, 3)
+
   const [formValues, setFormValues] = useState<FormValues>({
     batas_durasi_jilid_0_4: 3,
     batas_durasi_jilid_5_6: 4,
-    batas_pengulangan_taskih: 2,
+    batas_pengulangan_taskih: 3,
   })
   const [hasChanges, setHasChanges] = useState(false)
 
@@ -144,30 +142,26 @@ export default function AturanCapaianPage() {
     return (
       aturan?.batas_durasi_jilid_0_4 === 3 &&
       aturan?.batas_durasi_jilid_5_6 === 4 &&
-      aturan?.batas_pengulangan_taskih === 2
+      aturan?.batas_pengulangan_taskih === 3
     )
   }, [aturan])
 
   const canSimpan = hasChanges && !formIsDuplikat && formBerbedaDariAktif
-
-  const namaModelBaru = namaModel(
-    formValues.batas_durasi_jilid_0_4,
-    formValues.batas_durasi_jilid_5_6,
-    formValues.batas_pengulangan_taskih
-  )
 
   function handleSliderChange(name: string, value: number) {
     setFormValues((prev) => ({ ...prev, [name]: value }))
     setHasChanges(true)
   }
 
-  // ── Simpan ───────────────────────────────────────────────────────────────────
+  // ── Simpan (sekaligus latih ulang & reklasifikasi dalam satu alur) ───────────
 
   async function eksekusiSimpan() {
     setActiveModal(null)
+    setEvaluasi(null)
     initProcess({
-      title: 'Menyimpan Aturan Capaian',
-      subtitle: 'Proses nonaktifkan model lama dan simpan konfigurasi baru ke database.',
+      title: 'Menyimpan & Melatih Ulang Model',
+      subtitle:
+        'Simpan konfigurasi baru, latih Decision Tree, dan klasifikasi ulang seluruh santri.',
       steps: [
         {
           id: 'nonaktif',
@@ -188,6 +182,20 @@ export default function AturanCapaianPage() {
           label: 'Generate data training',
           description: 'Trigger database otomatis membuat data di training_master',
           icon: <IconBrain size={14} />,
+          status: 'idle',
+        },
+        {
+          id: 'latih',
+          label: 'Melatih model ML',
+          description: 'Mengirim data ke ML Service Flask dan melatih Decision Tree',
+          icon: <IconBrain size={14} />,
+          status: 'idle',
+        },
+        {
+          id: 'reklasifikasi',
+          label: 'Reklasifikasi semua santri',
+          description: 'Memperbarui hasil rekomendasi seluruh santri menggunakan model baru',
+          icon: <IconWand size={14} />,
           status: 'idle',
         },
         {
@@ -213,19 +221,31 @@ export default function AturanCapaianPage() {
       await new Promise((r) => setTimeout(r, 600))
       updateStep('trigger', { status: 'done', result: 'training_master berhasil digenerate' })
 
+      updateStep('latih', { status: 'running' })
+      const hasil = await latihUlangModel(newAturan.id)
+      updateStep('latih', { status: 'done', result: `Model ${hasil.versi} selesai dilatih` })
+
+      updateStep('reklasifikasi', { status: 'running' })
+      await reklasifikasiSemua()
+      updateStep('reklasifikasi', {
+        status: 'done',
+        result: `Santri berhasil diklasifikasi ulang`,
+      })
+
       updateStep('reload', { status: 'running' })
-      setAturan(newAturan)
-      setSavedAturanId(newAturan.id)
       setHasChanges(false)
-      setNeedsRetrain(true)
+      setEvaluasi(hasil)
       await loadData()
       updateStep('reload', { status: 'done', result: 'Data halaman diperbarui' })
 
-      toast.success('Aturan capaian berhasil disimpan')
+      setProcessEvaluasi(hasil)
+      toast.success(`Aturan disimpan & model dilatih! Akurasi: ${formatPersen(hasil.akurasi)}`, {
+        description: `Santri berhasil diklasifikasi ulang`,
+      })
     } catch (err: unknown) {
       const step = processStepsRef.current.find((s) => s.status === 'running')
       if (step) updateStep(step.id, { status: 'error', result: (err as Error).message })
-      toast.error((err as Error).message ?? 'Gagal menyimpan aturan')
+      toast.error((err as Error).message ?? 'Gagal menyimpan & melatih aturan')
     }
   }
 
@@ -252,6 +272,20 @@ export default function AturanCapaianPage() {
           status: 'idle',
         },
         {
+          id: 'latih',
+          label: 'Melatih model ML',
+          description: 'Mengirim data ke ML Service Flask dan melatih Decision Tree',
+          icon: <IconBrain size={14} />,
+          status: 'idle',
+        },
+        {
+          id: 'reklasifikasi',
+          label: 'Reklasifikasi semua santri',
+          description: 'Memperbarui hasil rekomendasi seluruh santri menggunakan model default',
+          icon: <IconWand size={14} />,
+          status: 'idle',
+        },
+        {
           id: 'reload',
           label: 'Refresh data halaman',
           description: 'Memuat ulang daftar model dan model aktif',
@@ -275,135 +309,36 @@ export default function AturanCapaianPage() {
           : 'Model default dibuat baru',
       })
 
+      updateStep('latih', { status: 'running' })
+      const hasil = await latihUlangModel(newAturan.id)
+      updateStep('latih', { status: 'done', result: `Model ${hasil.versi} selesai dilatih` })
+
+      updateStep('reklasifikasi', { status: 'running' })
+      await reklasifikasiSemua()
+      updateStep('reklasifikasi', {
+        status: 'done',
+        result: `Santri berhasil diklasifikasi ulang`,
+      })
+
       updateStep('reload', { status: 'running' })
-      setAturan(newAturan)
-      setSavedAturanId(newAturan.id)
       setFormValues({
         batas_durasi_jilid_0_4: 3,
         batas_durasi_jilid_5_6: 4,
         batas_pengulangan_taskih: 2,
       })
       setHasChanges(false)
-      setNeedsRetrain(!newAturan.model_versi)
+      setEvaluasi(hasil)
       await loadData()
       updateStep('reload', { status: 'done', result: 'Halaman diperbarui' })
 
-      toast.success(
-        newAturan.model_versi
-          ? 'Aturan berhasil dikembalikan ke default'
-          : 'Aturan default berhasil dipulihkan'
-      )
+      setProcessEvaluasi(hasil)
+      toast.success('Aturan default dipulihkan & model dilatih ulang', {
+        description: `Santri berhasil diklasifikasi ulang`,
+      })
     } catch (err: unknown) {
       const step = processStepsRef.current.find((s) => s.status === 'running')
       if (step) updateStep(step.id, { status: 'error', result: (err as Error).message })
       toast.error((err as Error).message ?? 'Gagal reset aturan')
-    }
-  }
-
-  // ── Latih ulang ──────────────────────────────────────────────────────────────
-
-  async function eksekusiLatihUlang(fromModal?: ModalType) {
-    if (fromModal) setActiveModal(null)
-
-    const targetId = savedAturanId ?? aturan?.id
-    if (!targetId) {
-      toast.error('Tidak ada aturan aktif')
-      return
-    }
-
-    initProcess({
-      title: 'Latih Ulang Decision Tree',
-      subtitle: 'Melatih model dengan data training_master berdasarkan aturan aktif.',
-      steps: [
-        {
-          id: 'fetch-aturan',
-          label: 'Ambil konfigurasi aturan',
-          description: 'Membaca parameter aturan aktif dari database',
-          icon: <IconDatabase size={14} />,
-          status: 'idle',
-        },
-        {
-          id: 'fetch-training',
-          label: 'Ambil data training',
-          description: 'Mengambil data dari tabel training_master',
-          icon: <IconDatabase size={14} />,
-          status: 'idle',
-        },
-        {
-          id: 'latih',
-          label: 'Melatih model ML',
-          description: 'Mengirim data ke ML Service Flask dan melatih Decision Tree',
-          icon: <IconBrain size={14} />,
-          status: 'idle',
-        },
-        {
-          id: 'evaluasi',
-          label: 'Simpan hasil evaluasi',
-          description: 'Menyimpan akurasi, F1, precision, recall ke database',
-          icon: <IconChartPie size={14} />,
-          status: 'idle',
-        },
-        {
-          id: 'reklasifikasi',
-          label: 'Reklasifikasi semua santri',
-          description: 'Memperbarui hasil rekomendasi seluruh santri menggunakan model baru',
-          icon: <IconWand size={14} />,
-          status: 'idle',
-        },
-        {
-          id: 'reload',
-          label: 'Refresh data halaman',
-          description: 'Memuat ulang data dan model aktif',
-          icon: <IconRefresh size={14} />,
-          status: 'idle',
-        },
-      ],
-    })
-
-    setEvaluasi(null)
-
-    try {
-      updateStep('fetch-aturan', { status: 'running' })
-      await new Promise((r) => setTimeout(r, 300))
-      updateStep('fetch-aturan', { status: 'done', result: 'Konfigurasi aturan berhasil dibaca' })
-
-      updateStep('fetch-training', { status: 'running' })
-      await new Promise((r) => setTimeout(r, 400))
-      updateStep('fetch-training', { status: 'done', result: 'Data training siap dikirim' })
-
-      updateStep('latih', { status: 'running' })
-      const hasil = await latihUlangModel(targetId)
-      updateStep('latih', { status: 'done', result: `Model ${hasil.versi} selesai dilatih` })
-
-      updateStep('evaluasi', { status: 'running' })
-      await new Promise((r) => setTimeout(r, 300))
-      updateStep('evaluasi', {
-        status: 'done',
-        result: `Akurasi: ${Math.round(hasil.akurasi * 100)}% | F1: ${Math.round(hasil.f1 * 100)}%`,
-      })
-
-      updateStep('reklasifikasi', { status: 'running' })
-      await reklasifikasiSemua()
-      updateStep('reklasifikasi', {
-        status: 'done',
-        result: `${hasil.berhasil} santri berhasil diklasifikasi ulang`,
-      })
-
-      updateStep('reload', { status: 'running' })
-      setEvaluasi(hasil)
-      setNeedsRetrain(false)
-      setSavedAturanId(null)
-      await loadData()
-      updateStep('reload', { status: 'done', result: 'Data halaman diperbarui' })
-
-      setProcessEvaluasi(hasil)
-      toast.success(`Model berhasil dilatih! Akurasi: ${Math.round(hasil.akurasi * 100)}%`, {
-        description: `${hasil.berhasil} santri berhasil diklasifikasi ulang`,
-      })
-    } catch (err: unknown) {
-      const step = processStepsRef.current.find((s) => s.status === 'running')
-      if (step) updateStep(step.id, { status: 'error', result: (err as Error).message })
-      toast.error((err as Error).message ?? 'Gagal melatih model')
     }
   }
 
@@ -415,7 +350,7 @@ export default function AturanCapaianPage() {
 
     initProcess({
       title: 'Menghapus Model',
-      subtitle: `Menghapus model ${namaModel(selectedRiwayat.batas_durasi_jilid_0_4, selectedRiwayat.batas_durasi_jilid_5_6, selectedRiwayat.batas_pengulangan_taskih)} secara permanen.`,
+      subtitle: `Menghapus model ${namaModel(selectedRiwayat.model_versi)} secara permanen.`,
       steps: [
         {
           id: 'cek',
@@ -476,23 +411,21 @@ export default function AturanCapaianPage() {
     }
   }
 
-  // ── Set aktif ────────────────────────────────────────────────────────────────
+  // ── Set aktif (selalu melatih ulang model + reklasifikasi) ────────────────────
 
   async function eksekusiSetAktif() {
     if (!selectedRiwayat) return
     setActiveModal(null)
 
     const target = selectedRiwayat
-    const sudahDilatih = !!target.model_versi
-    const namaTarget = namaModel(
-      target.batas_durasi_jilid_0_4,
-      target.batas_durasi_jilid_5_6,
-      target.batas_pengulangan_taskih
-    )
+    const namaTarget = namaModel(target.model_versi)
+
+    setSelectedRiwayat(null)
+    setEvaluasi(null)
 
     initProcess({
-      title: 'Mengaktifkan Model',
-      subtitle: `Mengganti model aktif ke ${namaTarget}.`,
+      title: 'Mengaktifkan & Melatih Ulang Model',
+      subtitle: `Mengganti model aktif ke ${namaTarget}, melatih ulang, dan reklasifikasi seluruh santri.`,
       steps: [
         {
           id: 'ambil',
@@ -515,17 +448,20 @@ export default function AturanCapaianPage() {
           icon: <IconCheck size={14} />,
           status: 'idle',
         },
-        ...(sudahDilatih
-          ? [
-              {
-                id: 'reklasifikasi',
-                label: 'Reklasifikasi semua santri',
-                description: 'Memperbarui hasil rekomendasi menggunakan model ini',
-                icon: <IconWand size={14} />,
-                status: 'idle' as const,
-              },
-            ]
-          : []),
+        {
+          id: 'latih',
+          label: 'Melatih model ML',
+          description: 'Mengirim data ke ML Service Flask dan melatih Decision Tree',
+          icon: <IconBrain size={14} />,
+          status: 'idle',
+        },
+        {
+          id: 'reklasifikasi',
+          label: 'Reklasifikasi semua santri',
+          description: 'Memperbarui hasil rekomendasi menggunakan model ini',
+          icon: <IconWand size={14} />,
+          status: 'idle',
+        },
         {
           id: 'reload',
           label: 'Refresh data halaman',
@@ -535,8 +471,6 @@ export default function AturanCapaianPage() {
         },
       ],
     })
-
-    setSelectedRiwayat(null)
 
     try {
       updateStep('ambil', { status: 'running' })
@@ -551,30 +485,95 @@ export default function AturanCapaianPage() {
       await setAturanAktif(target.id)
       updateStep('aktifkan', { status: 'done', result: `${namaTarget} kini aktif` })
 
-      if (sudahDilatih) {
-        updateStep('reklasifikasi', { status: 'running' })
-        await reklasifikasiSemua()
-        updateStep('reklasifikasi', {
-          status: 'done',
-          result: 'Santri berhasil diklasifikasi ulang',
-        })
-      }
+      updateStep('latih', { status: 'running' })
+      const hasil = await latihUlangModel(target.id)
+      updateStep('latih', { status: 'done', result: `Model ${hasil.versi} selesai dilatih` })
+
+      updateStep('reklasifikasi', { status: 'running' })
+      await reklasifikasiSemua()
+      updateStep('reklasifikasi', {
+        status: 'done',
+        result: `Santri berhasil diklasifikasi ulang`,
+      })
 
       updateStep('reload', { status: 'running' })
-      setSavedAturanId(target.id)
-      setNeedsRetrain(!sudahDilatih)
+      setEvaluasi(hasil)
       await loadData()
       updateStep('reload', { status: 'done', result: 'Halaman diperbarui' })
 
-      toast.success(
-        sudahDilatih
-          ? `${namaTarget} berhasil diaktifkan & data diperbarui`
-          : `${namaTarget} kini aktif`
-      )
+      setProcessEvaluasi(hasil)
+      toast.success(`${namaTarget} aktif & model dilatih ulang`, {
+        description: `Santri berhasil diklasifikasi ulang`,
+      })
     } catch (err: unknown) {
       const step = processStepsRef.current.find((s) => s.status === 'running')
       if (step) updateStep(step.id, { status: 'error', result: (err as Error).message })
       toast.error((err as Error).message ?? 'Gagal mengaktifkan model')
+    }
+  }
+
+  // ── Latih ulang model aktif saja (tanpa nonaktif/aktifkan ulang) ─────────────
+
+  async function eksekusiLatihUlangSaja(target: AturanCapaian) {
+    setActiveModal(null)
+    setSelectedRiwayat(null)
+    setEvaluasi(null)
+
+    const namaTarget = namaModel(target.model_versi)
+
+    initProcess({
+      title: 'Melatih Ulang Model Aktif',
+      subtitle: `Melatih ulang ${namaTarget} dan reklasifikasi seluruh santri.`,
+      steps: [
+        {
+          id: 'latih',
+          label: 'Melatih model ML',
+          description: 'Mengirim data ke ML Service Flask dan melatih Decision Tree',
+          icon: <IconBrain size={14} />,
+          status: 'idle',
+        },
+        {
+          id: 'reklasifikasi',
+          label: 'Reklasifikasi semua santri',
+          description: 'Memperbarui hasil rekomendasi menggunakan model ini',
+          icon: <IconWand size={14} />,
+          status: 'idle',
+        },
+        {
+          id: 'reload',
+          label: 'Refresh data halaman',
+          description: 'Memuat ulang model aktif dan daftar riwayat',
+          icon: <IconRefresh size={14} />,
+          status: 'idle',
+        },
+      ],
+    })
+
+    try {
+      updateStep('latih', { status: 'running' })
+      const hasil = await latihUlangModel(target.id)
+      updateStep('latih', { status: 'done', result: `Model ${hasil.versi} selesai dilatih` })
+
+      updateStep('reklasifikasi', { status: 'running' })
+      await reklasifikasiSemua()
+      updateStep('reklasifikasi', {
+        status: 'done',
+        result: `Santri berhasil diklasifikasi ulang`,
+      })
+
+      updateStep('reload', { status: 'running' })
+      setEvaluasi(hasil)
+      await loadData()
+      updateStep('reload', { status: 'done', result: 'Halaman diperbarui' })
+
+      setProcessEvaluasi(hasil)
+      toast.success(`Model berhasil dilatih ulang! Akurasi: ${formatPersen(hasil.akurasi)}`, {
+        description: `Santri berhasil diklasifikasi ulang`,
+      })
+    } catch (err: unknown) {
+      const step = processStepsRef.current.find((s) => s.status === 'running')
+      if (step) updateStep(step.id, { status: 'error', result: (err as Error).message })
+      toast.error((err as Error).message ?? 'Gagal melatih ulang model')
     }
   }
 
@@ -683,9 +682,8 @@ export default function AturanCapaianPage() {
             {hasChanges && !formIsDuplikat && (
               <div className="flex items-center gap-2 px-3 py-2.5 bg-muted/50 rounded-xl border border-border">
                 <IconBrain size={14} className="text-muted-foreground shrink-0" />
-                <span className="text-xs text-muted-foreground">Nama model baru:</span>
-                <span className="text-xs font-mono font-semibold text-primary">
-                  {namaModelBaru}
+                <span className="text-xs text-muted-foreground">
+                  Konfigurasi baru akan dilatih sebagai model baru saat disimpan.
                 </span>
               </div>
             )}
@@ -700,17 +698,6 @@ export default function AturanCapaianPage() {
                 <IconRotateClockwise size={15} />
                 Reset Default
               </button>
-
-              {(needsRetrain || (aturan && !aturan.model_versi)) && (
-                <button
-                  onClick={() => setActiveModal('latih')}
-                  disabled={loading}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-sm font-semibold hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors disabled:opacity-50"
-                >
-                  <IconBrain size={15} />
-                  Latih Ulang Model
-                </button>
-              )}
 
               <button
                 onClick={() => setActiveModal('simpan')}
@@ -742,11 +729,7 @@ export default function AturanCapaianPage() {
                   </Badge>
                 </div>
                 <p className="text-xs font-mono font-semibold text-foreground break-all">
-                  {namaModel(
-                    aturan.batas_durasi_jilid_0_4,
-                    aturan.batas_durasi_jilid_5_6,
-                    aturan.batas_pengulangan_taskih
-                  )}
+                  {namaModel(aturan.model_versi)}
                 </p>
                 <div className="space-y-1.5 pt-1">
                   {[
@@ -760,81 +743,70 @@ export default function AturanCapaianPage() {
                     </div>
                   ))}
                 </div>
-                {aturan.model_versi ? (
-                  <div className="border-t border-border pt-3 space-y-1.5">
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">
-                      Performa Model
-                    </h4>
-                    {[
-                      { label: 'Akurasi', value: aturan.model_akurasi, color: 'text-emerald-600' },
-                      { label: 'Precision', value: aturan.model_precision, color: 'text-blue-600' },
-                      { label: 'Recall', value: aturan.model_recall, color: 'text-purple-600' },
-                      { label: 'F1-Score', value: aturan.model_f1, color: 'text-amber-600' },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">{label}</span>
-                        <span className={cn('text-xs font-semibold', color)}>
-                          {value != null ? `${Math.round(value * 100)}%` : '—'}
-                        </span>
-                      </div>
-                    ))}
-                    <p className="text-[10px] text-muted-foreground pt-1">
-                      Dilatih:{' '}
-                      {aturan.model_trained_at
-                        ? new Date(aturan.model_trained_at).toLocaleDateString('id-ID')
-                        : '—'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="border-t border-border pt-3">
-                    <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                      <IconAlertTriangle size={12} />
-                      Model ini belum pernah dilatih
-                    </p>
-                  </div>
-                )}
               </div>
             )}
 
-            <div className="bg-card rounded-xl border border-border p-4">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <IconHistory size={13} />
                 Semua Model ({sortedRiwayat.length})
               </h3>
+
               {riwayat.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">Belum ada riwayat</p>
+                <p className="py-6 text-center text-xs text-muted-foreground">
+                  Belum ada riwayat model.
+                </p>
               ) : (
-                <ScrollArea className="max-h-120">
-                  <div className="space-y-2 pr-2">
-                    {sortedRiwayat.map((r, i) => (
-                      <RiwayatCard
-                        key={r.id}
-                        r={r}
-                        index={i}
-                        onDetail={(item) => {
-                          setSelectedRiwayat(item)
-                          setActiveModal('detail')
-                        }}
-                        onDelete={(item) => {
-                          setSelectedRiwayat(item)
-                          setActiveModal('delete')
-                        }}
-                        onSetAktif={(item) => {
-                          setSelectedRiwayat(item)
-                          setActiveModal('set-aktif')
-                        }}
-                      />
-                    ))}
-                  </div>
-                </ScrollArea>
+                <div className="space-y-3">
+                  {displayedRiwayat.map((r, i) => (
+                    <RiwayatCard
+                      key={r.id}
+                      r={r}
+                      index={i}
+                      onDetail={(item) => {
+                        setSelectedRiwayat(item)
+                        setActiveModal('detail')
+                      }}
+                      onSetAktif={(item) => {
+                        setSelectedRiwayat(item)
+                        setActiveModal('set-aktif')
+                      }}
+                    />
+                  ))}
+                  {sortedRiwayat.length > 3 && (
+                    <div className="mt-4 flex justify-center">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="italic text-muted-foreground hover:text-foreground hover:bg-muted/10 transition-colors"
+                        onClick={() => setShowAllModels(!showAllModels)}
+                      >
+                        {showAllModels ? (
+                          <>
+                            <ArrowLeft size={14}/>
+                            <span>Sembunyikan</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Lihat {sortedRiwayat.length - 3} model lainnya</span>
+                            <ArrowRight size={14}/>
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
-            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl">
-              <IconAlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                Setiap aturan menghasilkan model baru. Pastikan melakukan{' '}
-                <strong>Latih Ulang Model</strong> setelah menyimpan atau mengganti aturan aktif.
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+              <IconAlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+
+              <p className="text-xs leading-5 text-amber-700 dark:text-amber-400">
+                Setiap kali aturan disimpan atau model diaktifkan, sistem akan
+                <strong> melatih ulang model secara otomatis </strong>
+                dan melakukan klasifikasi ulang terhadap seluruh data santri agar hasil rekomendasi
+                selalu menggunakan model terbaru.
               </p>
             </div>
           </div>
@@ -850,7 +822,6 @@ export default function AturanCapaianPage() {
           setProcessOpen(false)
           setProcessConfig(null)
           setProcessEvaluasi(null)
-          if (needsRetrain) setActiveModal('post-simpan')
         }}
       />
 
@@ -870,19 +841,6 @@ export default function AturanCapaianPage() {
         aturan={aturan}
       />
 
-      <ModalPostSimpan
-        open={activeModal === 'post-simpan'}
-        onClose={() => setActiveModal(null)}
-        onLatihUlang={() => eksekusiLatihUlang('post-simpan')}
-      />
-
-      <ModalLatih
-        open={activeModal === 'latih'}
-        onClose={() => setActiveModal(null)}
-        onConfirm={() => eksekusiLatihUlang('latih')}
-        aturan={aturan}
-      />
-
       <ModalDetail
         open={activeModal === 'detail' && selectedRiwayat != null}
         selectedRiwayat={selectedRiwayat}
@@ -890,12 +848,15 @@ export default function AturanCapaianPage() {
           setActiveModal(null)
           setSelectedRiwayat(null)
         }}
-        onInitProcess={initProcess}
-        onUpdateStep={updateStep}
-        onSetEvaluasi={setEvaluasi}
-        onSetNeedsRetrain={setNeedsRetrain}
-        onLoadData={loadData}
-        processStepsRef={processStepsRef}
+        onSetAktif={(item) => {
+          setSelectedRiwayat(item)
+          setActiveModal('set-aktif')
+        }}
+        onLatihUlang={(item) => eksekusiLatihUlangSaja(item)}
+        onDelete={(item) => {
+          setSelectedRiwayat(item)
+          setActiveModal('delete')
+        }}
       />
 
       <ModalDelete

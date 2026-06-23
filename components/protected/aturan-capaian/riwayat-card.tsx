@@ -1,26 +1,21 @@
 'use client'
 
-import { IconEye, IconPlayerPlay, IconTrash } from '@tabler/icons-react'
+import { IconEye, IconPlayerPlay } from '@tabler/icons-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { AturanCapaian } from './types'
-import { namaModel } from './helpers'
+import { namaModel, formatPersen } from './helpers'
 
 interface RiwayatCardProps {
   r: AturanCapaian
   index: number
   onDetail: (r: AturanCapaian) => void
-  onDelete: (r: AturanCapaian) => void
   onSetAktif: (r: AturanCapaian) => void
 }
 
-export function RiwayatCard({ r, index, onDetail, onDelete, onSetAktif }: RiwayatCardProps) {
+export function RiwayatCard({ r, index, onDetail, onSetAktif }: RiwayatCardProps) {
   const isAktif = r.is_active
-  const nama = namaModel(
-    r.batas_durasi_jilid_0_4,
-    r.batas_durasi_jilid_5_6,
-    r.batas_pengulangan_taskih
-  )
+  const nama = namaModel(r.model_versi)
 
   return (
     <div
@@ -29,6 +24,7 @@ export function RiwayatCard({ r, index, onDetail, onDelete, onSetAktif }: Riwaya
         isAktif ? 'border-primary/40 bg-primary/5' : 'border-border bg-card hover:bg-muted/30'
       )}
     >
+      {/* Header: nama model + tanggal, badge status di kanan */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-mono font-semibold text-foreground truncate">{nama}</p>
@@ -54,6 +50,7 @@ export function RiwayatCard({ r, index, onDetail, onDelete, onSetAktif }: Riwaya
         )}
       </div>
 
+      {/* Parameter aturan */}
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
         <span>
           J0–4: <strong className="text-foreground">{r.batas_durasi_jilid_0_4} bln</strong>
@@ -66,24 +63,23 @@ export function RiwayatCard({ r, index, onDetail, onDelete, onSetAktif }: Riwaya
         </span>
       </div>
 
-      {r.model_f1 != null && (
+      {/* Metrik */}
+      {r.model_f1 != null ? (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
           <span className="text-muted-foreground">
-            F1:{' '}
-            <span className="font-semibold text-amber-600">{Math.round(r.model_f1 * 100)}%</span>
+            Akurasi:{' '}
+            <span className="font-semibold text-emerald-600">{formatPersen(r.model_akurasi)}</span>
           </span>
-          {r.model_akurasi != null && (
-            <span className="text-muted-foreground">
-              Akurasi:{' '}
-              <span className="font-semibold text-emerald-600">
-                {Math.round(r.model_akurasi * 100)}%
-              </span>
-            </span>
-          )}
+          <span className="text-muted-foreground">
+            F1: <span className="font-semibold text-amber-600">{formatPersen(r.model_f1)}</span>
+          </span>
         </div>
+      ) : (
+        <p className="text-[10px] text-amber-600">Belum pernah dilatih</p>
       )}
 
-      <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+      {/* Aksi */}
+      <div className="flex items-center gap-1.5 pt-0.5 justify-between">
         <button
           onClick={() => onDetail(r)}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border border-border bg-background hover:bg-muted transition-colors"
@@ -98,15 +94,6 @@ export function RiwayatCard({ r, index, onDetail, onDelete, onSetAktif }: Riwaya
           >
             <IconPlayerPlay size={12} />
             Aktifkan
-          </button>
-        )}
-        {!isAktif && (
-          <button
-            onClick={() => onDelete(r)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 text-red-600 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors ml-auto"
-          >
-            <IconTrash size={12} />
-            Hapus
           </button>
         )}
       </div>

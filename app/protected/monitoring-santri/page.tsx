@@ -929,14 +929,22 @@ export default function MonitoringSantriPage() {
 
   const loadData = useCallback(async () => {
     setLoading(true)
+
     try {
       const supabase = createClient()
+
       const {
         data: { user },
       } = await supabase.auth.getUser()
+
       setIsAdmin(user?.app_metadata?.role === 'admin')
 
+      const { error: syncError } = await supabase.rpc('sync_durasi_semua_santri')
+
+      if (syncError) throw syncError
+
       const [list, statsData] = await Promise.all([fetchSantriList(), fetchMonitoringStats()])
+
       setSantriList(list)
       setStats(statsData)
     } catch (err: unknown) {

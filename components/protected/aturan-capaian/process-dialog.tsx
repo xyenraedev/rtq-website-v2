@@ -21,6 +21,7 @@ import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { ProcessConfig, EvaluasiResult } from './types'
+import { formatPersen } from './helpers'
 
 interface ProcessDialogProps {
   open: boolean
@@ -210,7 +211,7 @@ export function ProcessDialog({
                     className={cn('p-2.5 rounded-xl border border-border text-center', bg)}
                   >
                     <p className="text-[10px] text-muted-foreground">{label}</p>
-                    <p className={cn('text-lg font-bold', color)}>{Math.round(value * 100)}%</p>
+                    <p className={cn('text-lg font-bold', color)}>{formatPersen(value)}</p>
                   </div>
                 ))}
               </div>
