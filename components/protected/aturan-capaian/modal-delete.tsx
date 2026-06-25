@@ -39,9 +39,7 @@ export function ModalDelete({ open, selectedRiwayat, onClose, onConfirm }: Modal
         <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-xl space-y-2">
           <p className="text-xs font-mono font-semibold text-foreground break-all">
             {namaModel(
-              selectedRiwayat.batas_durasi_jilid_0_4,
-              selectedRiwayat.batas_durasi_jilid_5_6,
-              selectedRiwayat.batas_pengulangan_taskih
+              selectedRiwayat.model_versi
             )}
           </p>
           <p className="text-xs text-muted-foreground">
