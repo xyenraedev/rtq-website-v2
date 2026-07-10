@@ -112,6 +112,10 @@ type SantriRelation = {
 export async function getSantriPerhatian(): Promise<SantriPerhatian[]> {
   const supabase = createClient()
 
+  // Tidak filter status='BBK' di query — itu bisa mengambil baris BBK
+  // meskipun BUKAN klasifikasi terbaru untuk santri tsb.
+  // Dedup dulu berdasarkan klasifikasi terbaru per santri (sama seperti
+  // getSebaranRekomendasi), baru filter yang status terbarunya BBK.
   const { data, error } = await supabase
     .from('rekomendasi')
     .select(
@@ -126,9 +130,7 @@ export async function getSantriPerhatian(): Promise<SantriPerhatian[]> {
       )
     `
     )
-    .eq('status', 'BBK') // ← filter BBK di server
     .order('classified_at', { ascending: false })
-    .limit(50) // cukup buffer untuk deduplikasi
 
   if (error || !data) return []
 
@@ -139,20 +141,23 @@ export async function getSantriPerhatian(): Promise<SantriPerhatian[]> {
     const santri = getRelation(row.santri as SantriRelation | SantriRelation[] | null)
 
     if (!santri) continue
-    if (seen.has(santri.id)) continue // ambil klasifikasi terbaru per santri saja
+    if (seen.has(santri.id)) continue // baris pertama = klasifikasi terbaru santri ini
 
     seen.add(santri.id)
 
-    result.push({
-      id: santri.id,
-      nama: santri.nama,
-      jilid_saat_ini: santri.jilid_saat_ini,
-      status: row.status,
-      probabilitas: row.probabilitas,
-      classified_at: row.classified_at,
-    })
+    // Hanya masukkan jika klasifikasi TERBARU-nya memang BBK
+    if (row.status === 'BBK') {
+      result.push({
+        id: santri.id,
+        nama: santri.nama,
+        jilid_saat_ini: santri.jilid_saat_ini,
+        status: row.status,
+        probabilitas: row.probabilitas,
+        classified_at: row.classified_at,
+      })
 
-    if (result.length >= 5) break
+      if (result.length >= 5) break
+    }
   }
 
   return result
