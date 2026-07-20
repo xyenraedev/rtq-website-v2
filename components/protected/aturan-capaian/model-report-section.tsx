@@ -590,9 +590,13 @@ function FeatureImportanceSection({ features }: { features: FeatureImportanceRow
 // Section: Visualisasi Pohon Keputusan
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TreeImageSection({ treePath }: { treePath: string | null }) {
+function TreeImageSection({ modelVersi }: { modelVersi?: string | null }) {
   const [imgError, setImgError] = useState(false)
-  const treeUrl = getTreeImageUrl()
+  const treeUrl = getTreeImageUrl(modelVersi ?? undefined)
+
+  useEffect(() => {
+    setImgError(false)
+  }, [treeUrl])
 
   return (
     <CollapsePanel label="Visualisasi Pohon Keputusan">
@@ -600,7 +604,7 @@ function TreeImageSection({ treePath }: { treePath: string | null }) {
         icon={<IconBrain size={13} />}
         title="Struktur Aturan Klasifikasi (max_depth = 5)"
       />
-      {!treePath || imgError ? (
+      {imgError ? (
         <div className="flex flex-col items-center gap-2 py-8 bg-muted/30 rounded-lg border border-dashed border-border">
           <IconAlertTriangle size={20} className="text-muted-foreground" />
           <p className="text-xs text-muted-foreground">
@@ -749,7 +753,7 @@ export function ModelReportSection({ latestEvaluasi, modelVersi }: ModelReportSe
           <CrossValidationTable cv={report.cross_validation} />
           <ConfusionMatrixSection cm={report.confusion_matrix} />
           <FeatureImportanceSection features={report.feature_importance} />
-          <TreeImageSection treePath={report.tree_image_path} />
+          <TreeImageSection modelVersi={modelVersi} />
         </div>
       )}
 

@@ -64,6 +64,9 @@ export interface ModelReport {
   cross_validation: CrossValidation
   confusion_matrix: ConfusionMatrix
   feature_importance: FeatureImportanceRow[]
+  // Selalu null sekarang — gambar tidak lagi disimpan sebagai file di
+  // server, tapi di-generate on-demand di memori. Ambil gambar lewat
+  // getTreeImageUrl(), bukan lewat field ini.
   tree_image_path: string | null
 }
 
@@ -76,6 +79,18 @@ export async function fetchModelReport(): Promise<ModelReport> {
   return res.json() as Promise<ModelReport>
 }
 
-export function getTreeImageUrl(): string {
-  return `${mlBaseUrl}/model/tree-image`
+/**
+ * URL untuk mengambil gambar visualisasi pohon keputusan.
+ * Gambar di-generate on-demand di server (BytesIO, tidak disimpan ke
+ * disk) — jadi setiap request bisa menghasilkan file yang "baru" dari
+ * sisi server meski isinya sama selama model belum dilatih ulang.
+ *
+ * Parameter `versi` opsional dipakai sebagai cache-buster: kirim
+ * `model_versi` dari /model/info atau /model/report supaya browser
+ * otomatis fetch ulang saat versi model berubah (setelah retrain),
+ * dan tetap memakai cache saat versi sama.
+ */
+export function getTreeImageUrl(versi?: string): string {
+  const base = `${mlBaseUrl}/model/tree-image`
+  return versi ? `${base}?v=${encodeURIComponent(versi)}` : base
 }
