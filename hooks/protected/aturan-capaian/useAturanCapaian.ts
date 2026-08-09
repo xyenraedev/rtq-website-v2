@@ -391,57 +391,66 @@ export function useAturanCapaian() {
 
     const target = selectedRiwayat
     const namaTarget = namaModel(target.model_versi)
+    const sudahPernahDilatih = !!target.model_trained_at
 
     setSelectedRiwayat(null)
     setEvaluasi(null)
 
+    const steps: ProcessStep[] = [
+      {
+        id: 'ambil',
+        label: 'Ambil data model',
+        description: 'Membaca detail model dari tabel aturan_capaian',
+        icon: 'database',
+        status: 'idle',
+      },
+      {
+        id: 'nonaktif',
+        label: 'Nonaktifkan model saat ini',
+        description: 'Mengubah is_active = false pada semua model aktif',
+        icon: 'x',
+        status: 'idle',
+      },
+      {
+        id: 'aktifkan',
+        label: `Aktifkan ${namaTarget}`,
+        description: 'Mengubah is_active = true pada model terpilih',
+        icon: 'check',
+        status: 'idle',
+      },
+      ...(sudahPernahDilatih
+        ? []
+        : [
+            {
+              id: 'latih',
+              label: 'Melatih model ML',
+              description: 'Mengirim data ke ML Service Flask dan melatih Decision Tree',
+              icon: 'brain',
+              status: 'idle',
+            } satisfies ProcessStep,
+          ]),
+      {
+        id: 'reklasifikasi',
+        label: 'Reklasifikasi semua santri',
+        description: 'Memperbarui hasil rekomendasi menggunakan model ini',
+        icon: 'wand',
+        status: 'idle',
+      },
+      {
+        id: 'reload',
+        label: 'Refresh data halaman',
+        description: 'Memuat ulang model aktif dan daftar riwayat',
+        icon: 'refresh',
+        status: 'idle',
+      },
+    ]
+
     initProcess({
-      title: 'Mengaktifkan & Melatih Ulang Model',
-      subtitle: `Mengganti model aktif ke ${namaTarget}, melatih ulang, dan reklasifikasi seluruh santri.`,
-      steps: [
-        {
-          id: 'ambil',
-          label: 'Ambil data model',
-          description: 'Membaca detail model dari tabel aturan_capaian',
-          icon: 'database',
-          status: 'idle',
-        },
-        {
-          id: 'nonaktif',
-          label: 'Nonaktifkan model saat ini',
-          description: 'Mengubah is_active = false pada semua model aktif',
-          icon: 'x',
-          status: 'idle',
-        },
-        {
-          id: 'aktifkan',
-          label: `Aktifkan ${namaTarget}`,
-          description: 'Mengubah is_active = true pada model terpilih',
-          icon: 'check',
-          status: 'idle',
-        },
-        {
-          id: 'latih',
-          label: 'Melatih model ML',
-          description: 'Mengirim data ke ML Service Flask dan melatih Decision Tree',
-          icon: 'brain',
-          status: 'idle',
-        },
-        {
-          id: 'reklasifikasi',
-          label: 'Reklasifikasi semua santri',
-          description: 'Memperbarui hasil rekomendasi menggunakan model ini',
-          icon: 'wand',
-          status: 'idle',
-        },
-        {
-          id: 'reload',
-          label: 'Refresh data halaman',
-          description: 'Memuat ulang model aktif dan daftar riwayat',
-          icon: 'refresh',
-          status: 'idle',
-        },
-      ],
+      title: sudahPernahDilatih ? 'Mengaktifkan Model' : 'Mengaktifkan & Melatih Model',
+      subtitle: sudahPernahDilatih
+        ? `Mengganti model aktif ke ${namaTarget} menggunakan model yang sudah tersimpan (tanpa training ulang).`
+        : `Mengganti model aktif ke ${namaTarget}, melatih untuk pertama kali, dan reklasifikasi seluruh santri.`,
+      steps,
     })
 
     try {
@@ -457,16 +466,27 @@ export function useAturanCapaian() {
       await setAturanAktif(target.id)
       updateStep('aktifkan', { status: 'done', result: `${namaTarget} kini aktif` })
 
-      updateStep('latih', { status: 'running' })
-      const hasil = await latihUlangModel(target.id)
-      updateStep('latih', { status: 'done', result: `Model ${hasil.versi} selesai dilatih` })
+      let hasil: EvaluasiResult
+      if (sudahPernahDilatih) {
+        // Model untuk aturan ini sudah pernah dilatih & tersimpan di Storage —
+        // tidak perlu training ulang, cukup dipakai lagi apa adanya.
+        hasil = {
+          akurasi: target.model_akurasi ?? 0,
+          precision: target.model_precision ?? 0,
+          recall: target.model_recall ?? 0,
+          f1: target.model_f1 ?? 0,
+          versi: target.model_versi ?? namaTarget,
+          berhasil: 0,
+        } as EvaluasiResult
+      } else {
+        updateStep('latih', { status: 'running' })
+        hasil = await latihUlangModel(target.id)
+        updateStep('latih', { status: 'done', result: `Model ${hasil.versi} selesai dilatih` })
+      }
 
       updateStep('reklasifikasi', { status: 'running' })
       await reklasifikasiSemua()
-      updateStep('reklasifikasi', {
-        status: 'done',
-        result: `Santri berhasil diklasifikasi ulang`,
-      })
+      updateStep('reklasifikasi', { status: 'done', result: `Santri berhasil diklasifikasi ulang` })
 
       updateStep('reload', { status: 'running' })
       setEvaluasi(hasil)
@@ -474,9 +494,12 @@ export function useAturanCapaian() {
       updateStep('reload', { status: 'done', result: 'Halaman diperbarui' })
 
       setProcessEvaluasi(hasil)
-      toast.success(`${namaTarget} aktif & model dilatih ulang`, {
-        description: `Santri berhasil diklasifikasi ulang`,
-      })
+      toast.success(
+        sudahPernahDilatih
+          ? `${namaTarget} aktif (pakai model tersimpan)`
+          : `${namaTarget} aktif & model dilatih`,
+        { description: `Santri berhasil diklasifikasi ulang` }
+      )
     } catch (err: unknown) {
       const step = processStepsRef.current.find((s) => s.status === 'running')
       if (step) updateStep(step.id, { status: 'error', result: (err as Error).message })

@@ -228,10 +228,13 @@ export default function AturanCapaianPage() {
               </button>
             </div>
 
-            <ModelReportSection
-              latestEvaluasi={evaluasi}
-              modelVersi={aturan?.model_versi ?? undefined}
-            />
+            {aturan && (
+              <ModelReportSection
+                aturanId={aturan.id}
+                latestEvaluasi={evaluasi}
+                modelVersi={aturan.model_versi ?? undefined}
+              />
+            )}
           </div>
 
           {/* ── Sidebar ──────────────────── */}
@@ -314,10 +317,11 @@ export default function AturanCapaianPage() {
             <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
               <IconAlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-600" />
               <p className="text-xs leading-5 text-amber-700 dark:text-amber-400">
-                Setiap kali aturan disimpan atau model diaktifkan, sistem akan
-                <strong> melatih ulang model secara otomatis </strong>
-                dan melakukan klasifikasi ulang terhadap seluruh data santri agar hasil rekomendasi
-                selalu menggunakan model terbaru.
+                Menyimpan aturan baru akan <strong>melatih model baru</strong>. Mengaktifkan model
+                yang sudah pernah dilatih <strong>tidak akan melatih ulang</strong> — sistem
+                langsung memakai model tersimpan. Pada kedua kasus, seluruh data santri akan{' '}
+                <strong>diklasifikasi ulang</strong> agar hasil rekomendasi selalu mengikuti model
+                yang sedang aktif.
               </p>
             </div>
           </div>

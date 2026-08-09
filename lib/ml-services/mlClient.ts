@@ -21,11 +21,11 @@ export interface MLKlasifikasiInput {
 }
 
 export interface AturanLimits {
+  id: string
   batas_durasi_jilid_0_4: number
   batas_durasi_jilid_5_6: number
   batas_pengulangan_taskih: number
 }
-
 export interface MLKlasifikasiResult {
   /** BBK = Butuh Bimbingan Khusus | TBBK = Tidak Butuh Bimbingan Khusus */
   status: 'TBBK' | 'BBK'
@@ -59,6 +59,7 @@ export interface MLBatchResult {
 
 export interface MLLatihInput {
   aturan: {
+    id: string
     batas_durasi_jilid_0_4: number
     batas_durasi_jilid_5_6: number
     batas_pengulangan_taskih: number
@@ -79,9 +80,7 @@ export interface MLEvaluasiResult {
 
 export interface MLHealthResult {
   status: string
-  model_trained: boolean
-  model_versi: string
-  total_data_latih: number
+  models_cached: string[]
 }
 
 export interface MLFeatureImportance {
@@ -89,8 +88,10 @@ export interface MLFeatureImportance {
 }
 
 export interface MLModelInfo {
+  aturan_id: string | null
   is_trained: boolean
   versi: string
+  trained_at: string | null
   total_data_latih: number
   aturan_aktif: {
     batas_durasi_jilid_0_4?: number
@@ -100,6 +101,7 @@ export interface MLModelInfo {
   feature_names: string[]
   algorithm: string
   params: Record<string, unknown>
+  cv_scores: number[]
 }
 
 // ─── Fetch Helper ─────────────────────────────────────────────────────────────
@@ -202,12 +204,16 @@ export async function mlLatih(input: MLLatihInput): Promise<MLEvaluasiResult> {
   })
 }
 
-/** Info lengkap model yang sedang aktif */
-export async function mlModelInfo(): Promise<MLModelInfo> {
-  return mlFetch<MLModelInfo>('/model/info')
+/** Info lengkap model untuk aturan_id tertentu */
+export async function mlModelInfo(aturanId: string): Promise<MLModelInfo> {
+  if (!aturanId) throw new Error('aturanId wajib diisi')
+  return mlFetch<MLModelInfo>(`/model/info?aturan_id=${encodeURIComponent(aturanId)}`)
 }
 
-/** Feature importance Decision Tree */
-export async function mlFeatureImportance(): Promise<MLFeatureImportance> {
-  return mlFetch<MLFeatureImportance>('/model/feature-importance')
+/** Feature importance Decision Tree untuk aturan_id tertentu */
+export async function mlFeatureImportance(aturanId: string): Promise<MLFeatureImportance> {
+  if (!aturanId) throw new Error('aturanId wajib diisi')
+  return mlFetch<MLFeatureImportance>(
+    `/model/feature-importance?aturan_id=${encodeURIComponent(aturanId)}`
+  )
 }

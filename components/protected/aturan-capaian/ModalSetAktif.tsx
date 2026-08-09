@@ -29,6 +29,7 @@ export function ModalSetAktif({
   onConfirm,
 }: ModalSetAktifProps) {
   if (!selectedRiwayat) return null
+  const sudahPernahDilatih = !!selectedRiwayat.model_trained_at
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -36,11 +37,12 @@ export function ModalSetAktif({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconPlayerPlay size={18} className="text-primary" />
-            Aktifkan & Latih Ulang Model Ini?
+            {sudahPernahDilatih ? 'Aktifkan Model Ini?' : 'Aktifkan & Latih Model Ini?'}
           </DialogTitle>
           <DialogDescription>
-            Model berikut akan dijadikan aktif, dilatih ulang, dan seluruh santri akan diklasifikasi
-            ulang. Model aktif saat ini akan dinonaktifkan.
+            {sudahPernahDilatih
+              ? 'Model ini sudah pernah dilatih sebelumnya dan akan langsung dipakai tanpa training ulang. Seluruh santri akan diklasifikasi ulang memakai model ini. Model aktif saat ini akan dinonaktifkan.'
+              : 'Model ini belum pernah dilatih. Model akan dijadikan aktif, dilatih untuk pertama kali, dan seluruh santri akan diklasifikasi ulang. Model aktif saat ini akan dinonaktifkan.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -56,6 +58,14 @@ export function ModalSetAktif({
                 5–6: <strong>{selectedRiwayat.batas_durasi_jilid_5_6} bln</strong> · Taskih:{' '}
                 <strong>{selectedRiwayat.batas_pengulangan_taskih}×</strong>
               </p>
+              {selectedRiwayat.model_trained_at && (
+                <p className="text-xs text-muted-foreground">
+                  Terakhir dilatih:{' '}
+                  <strong>
+                    {new Date(selectedRiwayat.model_trained_at).toLocaleString('id-ID')}
+                  </strong>
+                </p>
+              )}
               {selectedRiwayat.model_f1 != null ? (
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span>
@@ -106,20 +116,23 @@ export function ModalSetAktif({
           <div className="flex items-start gap-2 p-3 bg-muted/30 border border-border rounded-xl text-xs text-muted-foreground">
             <IconNetwork size={14} className="shrink-0 mt-0.5 text-primary" />
             <span>
-              Proses berjalan dalam <strong className="text-foreground">6 langkah</strong>: ambil
-              data → nonaktifkan lama → aktifkan baru → latih ulang model → reklasifikasi santri →
-              refresh.
+              Proses berjalan dalam{' '}
+              <strong className="text-foreground">
+                {sudahPernahDilatih ? '5 langkah' : '6 langkah'}
+              </strong>
+              : ambil data → nonaktifkan lama → aktifkan baru
+              {sudahPernahDilatih ? '' : ' → latih model'} → reklasifikasi santri → refresh.
             </span>
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>
             Batal
           </Button>
-          <Button onClick={onConfirm}>
+          <Button onClick={onConfirm} >
             <IconPlayerPlay size={14} className="mr-1.5" />
-            Aktifkan & Latih Ulang
+            Aktifkan Model
           </Button>
         </DialogFooter>
       </DialogContent>

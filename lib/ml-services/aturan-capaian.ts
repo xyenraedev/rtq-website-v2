@@ -49,8 +49,8 @@ export async function fetchRiwayatAturan(): Promise<AturanCapaian[]> {
   return (data ?? []) as AturanCapaian[]
 }
 
-export async function fetchFeatureImportance(): Promise<FeatureImportanceItem[]> {
-  const result = await mlFeatureImportance()
+export async function fetchFeatureImportance(aturanId: string): Promise<FeatureImportanceItem[]> {
+  const result = await mlFeatureImportance(aturanId)
   return result.features
 }
 
@@ -237,6 +237,7 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
 
   const evaluasi: MLEvaluasiResult = await mlLatih({
     aturan: {
+      id: aturan.id,
       batas_durasi_jilid_0_4: aturan.batas_durasi_jilid_0_4 as number,
       batas_durasi_jilid_5_6: aturan.batas_durasi_jilid_5_6 as number,
       batas_pengulangan_taskih: aturan.batas_pengulangan_taskih as number,

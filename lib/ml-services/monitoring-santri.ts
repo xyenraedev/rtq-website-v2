@@ -123,15 +123,13 @@ async function fetchAturanAktif(): Promise<AturanCapaian> {
 
 function toAturanLimits(aturan: AturanCapaian): AturanLimits {
   return {
+    id: aturan.id,
     batas_durasi_jilid_0_4: aturan.batas_durasi_jilid_0_4,
     batas_durasi_jilid_5_6: aturan.batas_durasi_jilid_5_6,
     batas_pengulangan_taskih: aturan.batas_pengulangan_taskih,
   }
 }
 
-// Disederhanakan drastis: santri_progress sudah punya field jilid/
-// durasi_bulan/pengulangan_taskih langsung, jadi tinggal passthrough,
-// tidak perlu lagi trik "jilid === 0 ? x : null" x7.
 function buildKlasifikasiInput(progress: SantriProgress): MLKlasifikasiInput {
   return {
     jilid: progress.jilid,
@@ -166,16 +164,13 @@ async function simpanRekomendasi(santriId: string, hasil: HasilDenganSumber): Pr
       probabilitas: hasil.probabilitas,
       sumber: hasil.sumber,
       model_versi: hasil.model_versi,
-      classified_at: new Date().toISOString(), // update timestamp
+      classified_at: new Date().toISOString(),
     },
-    { onConflict: 'santri_id' } // atau 'santri_id' jika itu nama constraint
+    { onConflict: 'santri_id' }
   )
   if (error) throw error
 }
 
-// Ambil progress terbaru langsung dari DB setelah mutasi, supaya klasifikasi
-// selalu memakai nilai final (termasuk durasi_bulan yang dikelola sync
-// function), bukan objek stale hasil .update()/.insert() sebelumnya.
 async function fetchProgressAktifById(progressId: string): Promise<SantriProgress> {
   const supabase = getClient()
   const { data, error } = await supabase
@@ -220,9 +215,6 @@ export async function insertSantri(
     throw sErr
   }
 
-  // durasi_bulan SENGAJA tidak diisi dari form — kolom ini computed,
-  // dihitung otomatis oleh sync function berdasarkan tanggal_mulai.
-  // Progress baru selalu mulai dari durasi_bulan = null.
   const { data: progress, error: pErr } = await supabase
     .from('santri_progress')
     .insert({
@@ -262,8 +254,6 @@ export async function updateSantri(
   const jilidLama = (progressLama as SantriProgress | null)?.jilid ?? -1
   const naikJilid = newJilid > jilidLama
 
-  // nomor_induk sengaja TIDAK disertakan di payload update — bersifat
-  // permanen sejak insert dan tidak boleh berubah.
   const { data: santri, error: sErr } = await supabase
     .from('santri')
     .update({
@@ -296,7 +286,6 @@ export async function updateSantri(
         .eq('id', (progressLama as SantriProgress).id)
     }
 
-    // durasi_bulan SENGAJA null — jilid baru, computed ulang oleh sync function.
     const { data: progressBaru, error: pErr } = await supabase
       .from('santri_progress')
       .insert({
@@ -313,12 +302,6 @@ export async function updateSantri(
     if (pErr) throw pErr
     progressId = (progressBaru as SantriProgress).id
   } else {
-    // FIX: durasi_bulan TIDAK disertakan dalam payload update.
-    // Kolom ini adalah computed value yang di-maintain oleh sync function
-    // (dihitung dari tanggal_mulai secara berkala). Form tidak pernah
-    // punya nilai durasi yang valid untuk field ini (selalu disabled/kosong
-    // di UI), jadi mengirimnya di sini hanya akan menimpa nilai asli
-    // dengan null/stale value. Hanya taskih yang memang di-edit user.
     const { data: progressUpdate, error: pErr } = await supabase
       .from('santri_progress')
       .update({
@@ -334,9 +317,6 @@ export async function updateSantri(
     progressId = (progressUpdate as SantriProgress).id
   }
 
-  // Re-fetch dari DB (bukan pakai objek hasil .update()/.insert() secara
-  // langsung) supaya klasifikasi memakai durasi_bulan final yang benar,
-  // bukan potongan payload yang baru saja kita kirim.
   const progressFinal = await fetchProgressAktifById(progressId)
 
   const hasil = await klasifikasiDenganFallback(progressFinal)

@@ -108,6 +108,7 @@ async function fetchAturanAktif(): Promise<AturanCapaian> {
 
 function toAturanLimits(aturan: AturanCapaian): AturanLimits {
   return {
+    id: aturan.id,
     batas_durasi_jilid_0_4: aturan.batas_durasi_jilid_0_4,
     batas_durasi_jilid_5_6: aturan.batas_durasi_jilid_5_6,
     batas_pengulangan_taskih: aturan.batas_pengulangan_taskih,

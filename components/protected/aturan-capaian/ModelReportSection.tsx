@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import {
   IconBrain,
@@ -36,9 +36,8 @@ import type { EvaluasiResult } from '@/lib/ml-services/aturan-capaian'
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ModelReportSectionProps {
-  /** Evaluasi segar dari proses latih ulang (opsional, override tampilan sementara) */
+  aturanId: string
   latestEvaluasi?: EvaluasiResult | null
-  /** Versi model aktif dari DB — trigger auto-fetch saat berubah */
   modelVersi?: string | null
 }
 
@@ -590,9 +589,15 @@ function FeatureImportanceSection({ features }: { features: FeatureImportanceRow
 // Section: Visualisasi Pohon Keputusan
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TreeImageSection({ modelVersi }: { modelVersi?: string | null }) {
+function TreeImageSection({
+  aturanId,
+  modelVersi,
+}: {
+  aturanId: string
+  modelVersi?: string | null
+}) {
   const [imgError, setImgError] = useState(false)
-  const treeUrl = getTreeImageUrl(modelVersi ?? undefined)
+  const treeUrl = getTreeImageUrl(aturanId, modelVersi ?? undefined)
 
   useEffect(() => {
     setImgError(false)
@@ -643,30 +648,47 @@ function TreeImageSection({ modelVersi }: { modelVersi?: string | null }) {
 // Main export
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function ModelReportSection({ latestEvaluasi, modelVersi }: ModelReportSectionProps) {
+export function ModelReportSection({
+  aturanId,
+  latestEvaluasi,
+  modelVersi,
+}: ModelReportSectionProps) {
   const [report, setReport] = useState<ModelReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Menjaga dari race condition: kalau fetch aturan A masih pending lalu
+  // user pindah ke aturan B, response A yang telat tidak boleh menimpa
+  // state milik B.
+  const requestIdRef = useRef(0)
+
   const load = useCallback(async () => {
+    if (!aturanId) return
+    const requestId = ++requestIdRef.current
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchModelReport()
+      const data = await fetchModelReport(aturanId)
+      if (requestId !== requestIdRef.current) return // sudah usang, abaikan
       setReport(data)
     } catch (err: unknown) {
+      if (requestId !== requestIdRef.current) return
+      setReport(null) // laporan lama pasti bukan milik aturanId ini — jangan ditampilkan
       setError((err as Error).message ?? 'Gagal memuat laporan model')
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
-  }, [])
+  }, [aturanId])
 
-  // Auto-fetch saat komponen mount atau modelVersi berubah
+  useEffect(() => {
+    setReport(null)
+    setError(null)
+  }, [aturanId])
+
   useEffect(() => {
     void load()
   }, [load, modelVersi])
 
-  // Merge evaluasi segar ke dalam report.evaluasi jika ada
   const mergedEvaluasi: ModelReport['evaluasi'] | null = latestEvaluasi
     ? {
         akurasi: latestEvaluasi.akurasi,
@@ -753,7 +775,7 @@ export function ModelReportSection({ latestEvaluasi, modelVersi }: ModelReportSe
           <CrossValidationTable cv={report.cross_validation} />
           <ConfusionMatrixSection cm={report.confusion_matrix} />
           <FeatureImportanceSection features={report.feature_importance} />
-          <TreeImageSection modelVersi={modelVersi} />
+          <TreeImageSection aturanId={aturanId} modelVersi={modelVersi} />
         </div>
       )}
 
