@@ -738,7 +738,7 @@ export function ModelReportSection({ latestEvaluasi, modelVersi }: ModelReportSe
           <MetricStrip evaluasi={mergedEvaluasi} />
           {latestEvaluasi && (
             <p className="text-[10px] text-muted-foreground text-center">
-              {latestEvaluasi.berhasil} santri berhasil diklasifikasi ulang
+              Santri berhasil diklasifikasi ulang
             </p>
           )}
         </div>

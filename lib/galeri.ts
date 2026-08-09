@@ -23,12 +23,10 @@ export interface GaleriWithKategori extends Galeri {
 }
 
 type RawGaleri = Galeri & {
-  galeri_kategori:
-    | {
-        id: string
-        nama: string
-      }[]
-    | null
+  galeri_kategori: {
+    id: string
+    nama: string
+  } | null
 }
 
 export interface InsertGaleriInput {
@@ -93,7 +91,7 @@ function transformRelasi(data: RawGaleri[]): GaleriWithKategori[] {
     deskripsi: item.deskripsi,
     images: item.images ?? [],
     created_at: item.created_at,
-    galeri_kategori: item.galeri_kategori?.[0] ?? null,
+    galeri_kategori: item.galeri_kategori ?? null, // hapus ?.[0]
   }))
 }
 
@@ -212,7 +210,7 @@ export async function fetchGaleriPaginated({
   if (error) throw error
 
   const total = count ?? 0
-  const items = transformRelasi((data ?? []) as RawGaleri[])
+  const items = transformRelasi((data ?? []) as unknown as RawGaleri[])
 
   return {
     data: items,
@@ -233,7 +231,7 @@ export async function fetchGaleri(): Promise<GaleriWithKategori[]> {
 
   if (!data) return []
 
-  return transformRelasi(data as RawGaleri[])
+  return transformRelasi(data as unknown as RawGaleri[])
 }
 
 export async function fetchGaleriById(id: string): Promise<GaleriWithKategori | null> {
@@ -245,8 +243,7 @@ export async function fetchGaleriById(id: string): Promise<GaleriWithKategori | 
 
   if (!data) return null
 
-  const item = data as RawGaleri
-
+  const item = data as unknown as RawGaleri
   return {
     id: item.id,
     galeri_kategori_id: item.galeri_kategori_id,
@@ -254,7 +251,7 @@ export async function fetchGaleriById(id: string): Promise<GaleriWithKategori | 
     deskripsi: item.deskripsi,
     images: item.images ?? [],
     created_at: item.created_at,
-    galeri_kategori: item.galeri_kategori?.[0] ?? null,
+    galeri_kategori: item.galeri_kategori ?? null,
   }
 }
 
@@ -307,8 +304,7 @@ export async function insertGaleri(
     throw new Error('Failed update images')
   }
 
-  const item = data as RawGaleri
-
+  const item = data as unknown as RawGaleri
   return {
     id: item.id,
     galeri_kategori_id: item.galeri_kategori_id,
@@ -316,7 +312,7 @@ export async function insertGaleri(
     deskripsi: item.deskripsi,
     images: item.images ?? [],
     created_at: item.created_at,
-    galeri_kategori: item.galeri_kategori?.[0] ?? null,
+    galeri_kategori: item.galeri_kategori ?? null,
   }
 }
 
@@ -375,8 +371,7 @@ export async function updateGaleri(
     throw new Error('Update failed')
   }
 
-  const item = data as RawGaleri
-
+  const item = data as unknown as RawGaleri
   return {
     id: item.id,
     galeri_kategori_id: item.galeri_kategori_id,
@@ -384,7 +379,7 @@ export async function updateGaleri(
     deskripsi: item.deskripsi,
     images: item.images ?? [],
     created_at: item.created_at,
-    galeri_kategori: item.galeri_kategori?.[0] ?? null,
+    galeri_kategori: item.galeri_kategori ?? null,
   }
 }
 

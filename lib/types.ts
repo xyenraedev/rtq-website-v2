@@ -2,18 +2,27 @@
 // TYPES: Sistem Rekomendasi Santri
 // ============================================================
 
-export type JenisKelamin = 'L' | 'P'
+export type JenisKelamin = 'Laki-laki' | 'Perempuan'
 export type StatusRekomendasi = 'TBBK' | 'BBK'
 export type SumberKlasifikasi = 'decision-tree' | 'rule-based' | 'manual'
+export type StatusKelulusan = 'belum_lulus' | 'lulus' | 'keluar'
 
 // ─── Master Santri ────────────────────────────────────────────────────────────
 
 export interface Santri {
   id: string
+  /**
+   * 7 digit: 4 digit tahun pendaftaran + 3 digit urutan (reset tiap
+   * tahun, mis. 2026031). Permanen — tidak pernah diubah setelah
+   * santri dibuat.
+   */
+  nomor_induk: string
   nama: string
   tanggal_lahir: string | null
   alamat: string | null
   jenis_kelamin: JenisKelamin | null
+  status_aktif: boolean
+  status_kelulusan: StatusKelulusan
   jilid_saat_ini: number
   total_pengulangan_taskih: number
   /** @deprecated Gunakan SantriProgress.durasi_bulan */
@@ -115,6 +124,13 @@ export interface AturanCapaianFormData {
 // ─── Form Data ────────────────────────────────────────────────────────────────
 
 export interface SantriFormData {
+  /**
+   * Wajib diisi saat insert (7 digit: tahun + urutan). Diabaikan saat
+   * update karena nomor induk bersifat permanen.
+   */
+  nomor_induk: string
+  status_aktif: boolean
+  status_kelulusan: StatusKelulusan
   nama: string
   tanggal_lahir: string
   alamat: string

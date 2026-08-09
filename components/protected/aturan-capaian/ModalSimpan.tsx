@@ -11,8 +11,8 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { DiffRow } from './diff-row'
-import { AturanCapaian, FormValues } from './types'
-import { buatNamaModel } from './helpers'
+import { AturanCapaian, FormValues } from '../../../lib/aturan-capaian/types'
+import { buatNamaModel } from '../../../lib/aturan-capaian/helpers'
 
 interface ModalSimpanProps {
   open: boolean

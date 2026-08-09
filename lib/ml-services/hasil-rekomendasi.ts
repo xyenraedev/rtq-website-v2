@@ -17,6 +17,9 @@ export interface RekomendasiRow {
   jenis_kelamin: string | null
   jilid_saat_ini: number
   total_pengulangan_taskih: number
+  nomor_induk: number | null
+  status_aktif: boolean
+  status_kelulusan: string
   status_rekomendasi: StatusRekomendasi | null
   alasan_rekomendasi: string | null
   probabilitas: number | null
@@ -40,27 +43,16 @@ export interface StatistikRekomendasi {
   }>
 }
 
-export async function fetchHasilRekomendasiList(filters?: {
-  status?: StatusRekomendasi | ''
-  search?: string
-}): Promise<RekomendasiRow[]> {
+export async function fetchHasilRekomendasiList(): Promise<RekomendasiRow[]> {
   const supabase = getClient()
 
-  let query = supabase
+  const { data, error } = await supabase
     .from('santri_dengan_rekomendasi')
     .select('*')
     .not('status_rekomendasi', 'is', null)
+    .eq('status_aktif', true)
     .order('classified_at', { ascending: false })
 
-  if (filters?.status) {
-    query = query.eq('status_rekomendasi', filters.status)
-  }
-
-  if (filters?.search) {
-    query = query.ilike('nama', `%${filters.search}%`)
-  }
-
-  const { data, error } = await query
   if (error) throw error
   return (data ?? []) as RekomendasiRow[]
 }
@@ -70,6 +62,7 @@ export async function fetchStatistikRekomendasi(): Promise<StatistikRekomendasi>
   const { data, error } = await supabase
     .from('santri_dengan_rekomendasi')
     .select('status_rekomendasi, jilid_saat_ini')
+    .eq('status_aktif', true)
 
   if (error) throw error
 
@@ -113,7 +106,6 @@ async function fetchAturanAktif(): Promise<AturanCapaian> {
   return data as AturanCapaian
 }
 
-/** Konversi AturanCapaian (row Supabase) -> AturanLimits (kontrak ML Service) */
 function toAturanLimits(aturan: AturanCapaian): AturanLimits {
   return {
     batas_durasi_jilid_0_4: aturan.batas_durasi_jilid_0_4,
@@ -136,26 +128,19 @@ export async function reklasifikasiSemua(): Promise<{ berhasil: number; gagal: n
   const list = progressList as SantriProgress[]
   const aturan = await fetchAturanAktif()
 
+  // Disederhanakan total: santri_progress sudah punya jilid/durasi_bulan/
+  // pengulangan_taskih langsung, tidak perlu lagi trik "jilid === i ? x : null".
   const batchInput = list.map((p) => ({
     id: p.santri_id,
-    jilid_saat_ini: p.jilid,
-    total_pengulangan_taskih: p.pengulangan_taskih,
-    durasi_jilid_0: p.jilid === 0 ? (p.durasi_bulan ?? null) : null,
-    durasi_jilid_1: p.jilid === 1 ? (p.durasi_bulan ?? null) : null,
-    durasi_jilid_2: p.jilid === 2 ? (p.durasi_bulan ?? null) : null,
-    durasi_jilid_3: p.jilid === 3 ? (p.durasi_bulan ?? null) : null,
-    durasi_jilid_4: p.jilid === 4 ? (p.durasi_bulan ?? null) : null,
-    durasi_jilid_5: p.jilid === 5 ? (p.durasi_bulan ?? null) : null,
-    durasi_jilid_6: p.jilid === 6 ? (p.durasi_bulan ?? null) : null,
+    jilid: p.jilid,
+    durasi_bulan: p.durasi_bulan,
+    pengulangan_taskih: p.pengulangan_taskih,
   }))
 
   try {
-    // Aturan aktif WAJIB dikirim — tanpa ini ML Service akan diam-diam
-    // memakai aturan hasil training terakhir, yang bisa berbeda dari
-    // aturan_capaian yang sedang is_active=true di database.
     const batchResult = await mlKlasifikasiBatch(batchInput, toAturanLimits(aturan))
 
-    const insertBatch = batchResult.hasil
+    const upsertBatch = batchResult.hasil
       .filter((h) => h.success && h.status)
       .map((h) => ({
         santri_id: h.id,
@@ -167,34 +152,36 @@ export async function reklasifikasiSemua(): Promise<{ berhasil: number; gagal: n
         model_versi: h.model_versi ?? '',
       }))
 
-    if (insertBatch.length > 0) {
-      const { error: insertErr } = await supabase.from('rekomendasi').insert(insertBatch)
-      if (insertErr) throw insertErr
+    if (upsertBatch.length > 0) {
+      const { error: upsertErr } = await supabase
+        .from('rekomendasi')
+        .upsert(upsertBatch, { onConflict: 'santri_id' })
+      if (upsertErr) throw upsertErr
     }
 
     return { berhasil: batchResult.berhasil, gagal: batchResult.gagal }
   } catch (err) {
     console.error('ML Batch gagal, fallback ke rule-based:', err)
 
-    // Fallback rule-based — sama seperti di santriService.ts, supaya
-    // reklasifikasi tetap jalan walau ML Service down, dan tetap
-    // dijamin sesuai aturan aktif karena rule murni baca dari `aturan`.
     let berhasil = 0
     let gagal = 0
 
     for (const p of list) {
       try {
         const hasil = klasifikasiSantri(p, aturan)
-        const { error: insertErr } = await supabase.from('rekomendasi').insert({
-          santri_id: p.santri_id,
-          status: hasil.status,
-          alasan: hasil.alasan,
-          fitur_snapshot: hasil.fitur_snapshot,
-          probabilitas: hasil.probabilitas,
-          sumber: 'rule-based' as const,
-          model_versi: hasil.model_versi,
-        })
-        if (insertErr) throw insertErr
+        const { error: upsertErr } = await supabase.from('rekomendasi').upsert(
+          {
+            santri_id: p.santri_id,
+            status: hasil.status,
+            alasan: hasil.alasan,
+            fitur_snapshot: hasil.fitur_snapshot,
+            probabilitas: hasil.probabilitas,
+            sumber: 'rule-based' as const,
+            model_versi: hasil.model_versi,
+          },
+          { onConflict: 'santri_id' }
+        )
+        if (upsertErr) throw upsertErr
         berhasil++
       } catch {
         gagal++

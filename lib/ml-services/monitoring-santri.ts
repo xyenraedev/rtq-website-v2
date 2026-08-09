@@ -1,13 +1,5 @@
 /**
  * Santri Service
- *
- * Arsitektur 3 tabel:
- *   santri          → data master santri
- *   santri_progress → progress per-jilid (sumber training + klasifikasi)
- *   rekomendasi     → hasil akhir final
- *
- * Klasifikasi HANYA berdasarkan jilid AKTIF (is_aktif = true).
- * Taskih & durasi reset ke 0 saat naik jilid.
  */
 
 import { createClient } from '@/lib/supabase/client'
@@ -129,7 +121,6 @@ async function fetchAturanAktif(): Promise<AturanCapaian> {
   return data as AturanCapaian
 }
 
-/** Konversi AturanCapaian (row Supabase) -> AturanLimits (kontrak ML Service) */
 function toAturanLimits(aturan: AturanCapaian): AturanLimits {
   return {
     batas_durasi_jilid_0_4: aturan.batas_durasi_jilid_0_4,
@@ -138,18 +129,14 @@ function toAturanLimits(aturan: AturanCapaian): AturanLimits {
   }
 }
 
+// Disederhanakan drastis: santri_progress sudah punya field jilid/
+// durasi_bulan/pengulangan_taskih langsung, jadi tinggal passthrough,
+// tidak perlu lagi trik "jilid === 0 ? x : null" x7.
 function buildKlasifikasiInput(progress: SantriProgress): MLKlasifikasiInput {
-  const { jilid } = progress
   return {
-    jilid_saat_ini: jilid,
-    total_pengulangan_taskih: progress.pengulangan_taskih,
-    durasi_jilid_0: jilid === 0 ? (progress.durasi_bulan ?? null) : null,
-    durasi_jilid_1: jilid === 1 ? (progress.durasi_bulan ?? null) : null,
-    durasi_jilid_2: jilid === 2 ? (progress.durasi_bulan ?? null) : null,
-    durasi_jilid_3: jilid === 3 ? (progress.durasi_bulan ?? null) : null,
-    durasi_jilid_4: jilid === 4 ? (progress.durasi_bulan ?? null) : null,
-    durasi_jilid_5: jilid === 5 ? (progress.durasi_bulan ?? null) : null,
-    durasi_jilid_6: jilid === 6 ? (progress.durasi_bulan ?? null) : null,
+    jilid: progress.jilid,
+    durasi_bulan: progress.durasi_bulan,
+    pengulangan_taskih: progress.pengulangan_taskih,
   }
 }
 
@@ -160,10 +147,6 @@ async function klasifikasiDenganFallback(progress: SantriProgress): Promise<Hasi
   const aturan = await fetchAturanAktif()
 
   try {
-    // Aturan aktif WAJIB dikirim ke ML Service supaya status akhir
-    // (BBK/TBBK) dijamin sesuai aturan_capaian yang is_active=true
-    // saat ini, terlepas dari aturan apa yang dipakai waktu model
-    // terakhir dilatih.
     const hasil = await mlKlasifikasi(input, toAturanLimits(aturan))
     return { ...hasil, sumber: 'decision-tree' }
   } catch {
@@ -174,16 +157,35 @@ async function klasifikasiDenganFallback(progress: SantriProgress): Promise<Hasi
 
 async function simpanRekomendasi(santriId: string, hasil: HasilDenganSumber): Promise<void> {
   const supabase = getClient()
-  const { error } = await supabase.from('rekomendasi').insert({
-    santri_id: santriId,
-    status: hasil.status,
-    alasan: hasil.alasan,
-    fitur_snapshot: hasil.fitur_snapshot,
-    probabilitas: hasil.probabilitas,
-    sumber: hasil.sumber,
-    model_versi: hasil.model_versi,
-  })
+  const { error } = await supabase.from('rekomendasi').upsert(
+    {
+      santri_id: santriId,
+      status: hasil.status,
+      alasan: hasil.alasan,
+      fitur_snapshot: hasil.fitur_snapshot,
+      probabilitas: hasil.probabilitas,
+      sumber: hasil.sumber,
+      model_versi: hasil.model_versi,
+      classified_at: new Date().toISOString(), // update timestamp
+    },
+    { onConflict: 'santri_id' } // atau 'santri_id' jika itu nama constraint
+  )
   if (error) throw error
+}
+
+// Ambil progress terbaru langsung dari DB setelah mutasi, supaya klasifikasi
+// selalu memakai nilai final (termasuk durasi_bulan yang dikelola sync
+// function), bukan objek stale hasil .update()/.insert() sebelumnya.
+async function fetchProgressAktifById(progressId: string): Promise<SantriProgress> {
+  const supabase = getClient()
+  const { data, error } = await supabase
+    .from('santri_progress')
+    .select('*')
+    .eq('id', progressId)
+    .single()
+
+  if (error) throw error
+  return data as SantriProgress
 }
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
@@ -193,32 +195,40 @@ export async function insertSantri(
 ): Promise<{ santri: Santri; klasifikasi: KlasifikasiResult }> {
   const supabase = getClient()
   const jilid = Number(formData.jilid_saat_ini)
-  const durasiKey = `durasi_jilid_${jilid}` as keyof SantriFormData
-  const durasiRaw = formData[durasiKey]
-  const durasi = durasiRaw ? Number(durasiRaw) : null
   const taskih = Number(formData.total_pengulangan_taskih)
 
   const { data: santri, error: sErr } = await supabase
     .from('santri')
     .insert({
+      nomor_induk: formData.nomor_induk.trim(),
       nama: formData.nama.trim(),
       tanggal_lahir: formData.tanggal_lahir || null,
       alamat: formData.alamat?.trim() || null,
       jenis_kelamin: formData.jenis_kelamin || null,
+      status_aktif: formData.status_aktif,
+      status_kelulusan: formData.status_kelulusan,
       jilid_saat_ini: jilid,
       total_pengulangan_taskih: taskih,
     })
     .select('*')
     .single()
 
-  if (sErr) throw sErr
+  if (sErr) {
+    if (sErr.code === '23505') {
+      throw new Error('Nomor induk sudah digunakan santri lain')
+    }
+    throw sErr
+  }
 
+  // durasi_bulan SENGAJA tidak diisi dari form — kolom ini computed,
+  // dihitung otomatis oleh sync function berdasarkan tanggal_mulai.
+  // Progress baru selalu mulai dari durasi_bulan = null.
   const { data: progress, error: pErr } = await supabase
     .from('santri_progress')
     .insert({
       santri_id: santri.id,
       jilid,
-      durasi_bulan: durasi,
+      durasi_bulan: null,
       pengulangan_taskih: taskih,
       tanggal_mulai: formData.tanggal_mulai ?? null,
       is_aktif: true,
@@ -240,9 +250,6 @@ export async function updateSantri(
 ): Promise<{ santri: Santri; klasifikasi: KlasifikasiResult }> {
   const supabase = getClient()
   const newJilid = Number(formData.jilid_saat_ini)
-  const durasiKey = `durasi_jilid_${newJilid}` as keyof SantriFormData
-  const durasiRaw = formData[durasiKey]
-  const durasi = durasiRaw ? Number(durasiRaw) : null
   const taskih = Number(formData.total_pengulangan_taskih)
 
   const { data: progressLama } = await supabase
@@ -255,6 +262,8 @@ export async function updateSantri(
   const jilidLama = (progressLama as SantriProgress | null)?.jilid ?? -1
   const naikJilid = newJilid > jilidLama
 
+  // nomor_induk sengaja TIDAK disertakan di payload update — bersifat
+  // permanen sejak insert dan tidak boleh berubah.
   const { data: santri, error: sErr } = await supabase
     .from('santri')
     .update({
@@ -262,6 +271,8 @@ export async function updateSantri(
       tanggal_lahir: formData.tanggal_lahir || null,
       alamat: formData.alamat?.trim() || null,
       jenis_kelamin: formData.jenis_kelamin || null,
+      status_aktif: formData.status_aktif,
+      status_kelulusan: formData.status_kelulusan,
       jilid_saat_ini: newJilid,
       total_pengulangan_taskih: taskih,
       updated_at: new Date().toISOString(),
@@ -272,7 +283,7 @@ export async function updateSantri(
 
   if (sErr) throw sErr
 
-  let progress: SantriProgress
+  let progressId: string
 
   if (naikJilid) {
     if (progressLama) {
@@ -285,6 +296,7 @@ export async function updateSantri(
         .eq('id', (progressLama as SantriProgress).id)
     }
 
+    // durasi_bulan SENGAJA null — jilid baru, computed ulang oleh sync function.
     const { data: progressBaru, error: pErr } = await supabase
       .from('santri_progress')
       .insert({
@@ -299,12 +311,17 @@ export async function updateSantri(
       .single()
 
     if (pErr) throw pErr
-    progress = progressBaru as SantriProgress
+    progressId = (progressBaru as SantriProgress).id
   } else {
+    // FIX: durasi_bulan TIDAK disertakan dalam payload update.
+    // Kolom ini adalah computed value yang di-maintain oleh sync function
+    // (dihitung dari tanggal_mulai secara berkala). Form tidak pernah
+    // punya nilai durasi yang valid untuk field ini (selalu disabled/kosong
+    // di UI), jadi mengirimnya di sini hanya akan menimpa nilai asli
+    // dengan null/stale value. Hanya taskih yang memang di-edit user.
     const { data: progressUpdate, error: pErr } = await supabase
       .from('santri_progress')
       .update({
-        durasi_bulan: durasi,
         pengulangan_taskih: taskih,
         updated_at: new Date().toISOString(),
       })
@@ -314,10 +331,15 @@ export async function updateSantri(
       .single()
 
     if (pErr) throw pErr
-    progress = progressUpdate as SantriProgress
+    progressId = (progressUpdate as SantriProgress).id
   }
 
-  const hasil = await klasifikasiDenganFallback(progress)
+  // Re-fetch dari DB (bukan pakai objek hasil .update()/.insert() secara
+  // langsung) supaya klasifikasi memakai durasi_bulan final yang benar,
+  // bukan potongan payload yang baru saja kita kirim.
+  const progressFinal = await fetchProgressAktifById(progressId)
+
+  const hasil = await klasifikasiDenganFallback(progressFinal)
   await simpanRekomendasi(id, hasil)
 
   return { santri: santri as Santri, klasifikasi: hasil }
@@ -366,7 +388,6 @@ export async function reklasifikasiBatch(santriIds: string[]): Promise<{
 
   try {
     const batchInput = list.map((p) => ({ id: p.santri_id, ...buildKlasifikasiInput(p) }))
-    // Aturan aktif dikirim sekali untuk seluruh batch — sama untuk semua santri.
     const batchResult = await mlKlasifikasiBatch(batchInput, toAturanLimits(aturan))
 
     const insertBatch = batchResult.hasil

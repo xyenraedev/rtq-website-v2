@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { DiffRow } from './diff-row'
-import { AturanCapaian } from './types'
+import { AturanCapaian } from '../../../lib/aturan-capaian/types'
 
 interface ModalResetProps {
   open: boolean
@@ -39,13 +39,13 @@ export function ModalReset({ open, onClose, onConfirm, aturan }: ModalResetProps
           <DiffRow
             label="Batas Jilid 0–4"
             before={`${aturan?.batas_durasi_jilid_0_4 ?? '—'} bulan`}
-            after="3 bulan"
+            after="6 bulan"
             changed={aturan?.batas_durasi_jilid_0_4 !== 3}
           />
           <DiffRow
             label="Batas Jilid 5–6"
             before={`${aturan?.batas_durasi_jilid_5_6 ?? '—'} bulan`}
-            after="4 bulan"
+            after="8 bulan"
             changed={aturan?.batas_durasi_jilid_5_6 !== 4}
           />
           <DiffRow

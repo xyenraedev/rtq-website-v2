@@ -1,6 +1,12 @@
 'use client'
 
-import { IconEye, IconAlertTriangle, IconPlayerPlay, IconBrain, IconTrash } from '@tabler/icons-react'
+import {
+  IconEye,
+  IconAlertTriangle,
+  IconPlayerPlay,
+  IconBrain,
+  IconTrash,
+} from '@tabler/icons-react'
 import {
   Dialog,
   DialogContent,
@@ -12,8 +18,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { AturanCapaian } from './types'
-import { namaModel, formatPersen } from './helpers'
+import { AturanCapaian } from '../../../lib/aturan-capaian/types'
+import { namaModel, formatPersen } from '../../../lib/aturan-capaian/helpers'
 
 interface ModalDetailProps {
   open: boolean
@@ -120,9 +126,7 @@ export function ModalDetail({
                 ].map(({ label, value, color }) => (
                   <div key={label} className="p-3 bg-muted/30 rounded-xl border border-border">
                     <p className="text-[10px] text-muted-foreground">{label}</p>
-                    <p className={cn('text-xl font-bold mt-0.5', color)}>
-                      {formatPersen(value)}
-                    </p>
+                    <p className={cn('text-xl font-bold mt-0.5', color)}>{formatPersen(value)}</p>
                   </div>
                 ))}
               </div>

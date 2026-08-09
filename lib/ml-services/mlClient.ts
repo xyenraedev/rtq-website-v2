@@ -7,16 +7,17 @@ export const mlBaseUrl = ML_SERVICE_URL
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Kontrak fitur ML — sengaja hanya 3 field, sama persis dengan kolom
+ * training_master / santri_progress di Supabase (jilid, durasi_bulan,
+ * pengulangan_taskih). Ini fitur satu-satunya yang dipakai rule
+ * (durasi > batas ATAU taskih >= batas), jadi tidak ada fitur turunan
+ * (histori jilid lain, rata-rata, total) yang bisa menyerap noise.
+ */
 export interface MLKlasifikasiInput {
-  jilid_saat_ini: number
-  total_pengulangan_taskih: number
-  durasi_jilid_0?: number | null
-  durasi_jilid_1?: number | null
-  durasi_jilid_2?: number | null
-  durasi_jilid_3?: number | null
-  durasi_jilid_4?: number | null
-  durasi_jilid_5?: number | null
-  durasi_jilid_6?: number | null
+  jilid: number
+  durasi_bulan: number | null
+  pengulangan_taskih: number
 }
 
 export interface AturanLimits {
@@ -137,11 +138,14 @@ async function mlFetch<T>(path: string, options?: RequestInit): Promise<T> {
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 function validateInput(input: MLKlasifikasiInput): void {
-  if (input.jilid_saat_ini < 0 || input.jilid_saat_ini > 7) {
-    throw new Error('jilid_saat_ini harus antara 0–7')
+  if (input.jilid < 0 || input.jilid > 7) {
+    throw new Error('jilid harus antara 0–7')
   }
-  if (input.total_pengulangan_taskih < 0) {
-    throw new Error('total_pengulangan_taskih tidak boleh negatif')
+  if (input.pengulangan_taskih < 0) {
+    throw new Error('pengulangan_taskih tidak boleh negatif')
+  }
+  if (input.durasi_bulan !== null && input.durasi_bulan < 0) {
+    throw new Error('durasi_bulan tidak boleh negatif')
   }
 }
 

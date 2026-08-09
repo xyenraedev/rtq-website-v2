@@ -10,8 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { AturanCapaian } from './types'
-import { namaModel } from './helpers'
+import { AturanCapaian } from '../../../lib/aturan-capaian/types'
+import { namaModel } from '../../../lib/aturan-capaian/helpers'
 
 interface ModalDeleteProps {
   open: boolean
@@ -38,9 +38,7 @@ export function ModalDelete({ open, selectedRiwayat, onClose, onConfirm }: Modal
 
         <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-xl space-y-2">
           <p className="text-xs font-mono font-semibold text-foreground break-all">
-            {namaModel(
-              selectedRiwayat.model_versi
-            )}
+            {namaModel(selectedRiwayat.model_versi)}
           </p>
           <p className="text-xs text-muted-foreground">
             Jilid 0–4: <strong>{selectedRiwayat.batas_durasi_jilid_0_4} bln</strong> · Jilid 5–6:{' '}

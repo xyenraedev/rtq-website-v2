@@ -18,11 +18,13 @@ export type ModalType =
   | 'process'
   | null
 
+export type ProcessIconKey = 'database' | 'check' | 'brain' | 'wand' | 'refresh' | 'trash' | 'x'
+
 export type ProcessStep = {
   id: string
   label: string
   description: string
-  icon: React.ReactNode
+  icon: ProcessIconKey
   status: 'idle' | 'running' | 'done' | 'error'
   result?: string
 }

@@ -10,8 +10,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { AturanCapaian } from './types'
-import { namaModel, formatPersen } from './helpers'
+import { AturanCapaian } from '../../../lib/aturan-capaian/types'
+import { namaModel, formatPersen } from '../../../lib/aturan-capaian/helpers'
 
 interface ModalSetAktifProps {
   open: boolean

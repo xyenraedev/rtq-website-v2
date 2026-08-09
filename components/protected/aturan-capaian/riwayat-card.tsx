@@ -1,10 +1,11 @@
 'use client'
 
+import { memo } from 'react'
 import { IconEye, IconPlayerPlay } from '@tabler/icons-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { AturanCapaian } from './types'
-import { namaModel, formatPersen } from './helpers'
+import { AturanCapaian } from '../../../lib/aturan-capaian/types'
+import { namaModel, formatPersen } from '../../../lib/aturan-capaian/helpers'
 
 interface RiwayatCardProps {
   r: AturanCapaian
@@ -13,7 +14,7 @@ interface RiwayatCardProps {
   onSetAktif: (r: AturanCapaian) => void
 }
 
-export function RiwayatCard({ r, index, onDetail, onSetAktif }: RiwayatCardProps) {
+function RiwayatCardComponent({ r, index, onDetail, onSetAktif }: RiwayatCardProps) {
   const isAktif = r.is_active
   const nama = namaModel(r.model_versi)
 
@@ -24,7 +25,6 @@ export function RiwayatCard({ r, index, onDetail, onSetAktif }: RiwayatCardProps
         isAktif ? 'border-primary/40 bg-primary/5' : 'border-border bg-card hover:bg-muted/30'
       )}
     >
-      {/* Header: nama model + tanggal, badge status di kanan */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs font-mono font-semibold text-foreground truncate">{nama}</p>
@@ -50,7 +50,6 @@ export function RiwayatCard({ r, index, onDetail, onSetAktif }: RiwayatCardProps
         )}
       </div>
 
-      {/* Parameter aturan */}
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
         <span>
           J0–4: <strong className="text-foreground">{r.batas_durasi_jilid_0_4} bln</strong>
@@ -63,7 +62,6 @@ export function RiwayatCard({ r, index, onDetail, onSetAktif }: RiwayatCardProps
         </span>
       </div>
 
-      {/* Metrik */}
       {r.model_f1 != null ? (
         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
           <span className="text-muted-foreground">
@@ -78,7 +76,6 @@ export function RiwayatCard({ r, index, onDetail, onSetAktif }: RiwayatCardProps
         <p className="text-[10px] text-amber-600">Belum pernah dilatih</p>
       )}
 
-      {/* Aksi */}
       <div className="flex items-center gap-1.5 pt-0.5 justify-between">
         <button
           onClick={() => onDetail(r)}
@@ -100,3 +97,5 @@ export function RiwayatCard({ r, index, onDetail, onSetAktif }: RiwayatCardProps
     </div>
   )
 }
+
+export const RiwayatCard = memo(RiwayatCardComponent)

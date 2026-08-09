@@ -20,8 +20,9 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-import { ProcessConfig, EvaluasiResult } from './types'
-import { formatPersen } from './helpers'
+import { ProcessConfig, EvaluasiResult } from '../../../lib/aturan-capaian/types'
+import { formatPersen } from '../../../lib/aturan-capaian/helpers'
+import { ProcessIcon } from './process-icons'
 
 interface ProcessDialogProps {
   open: boolean
@@ -68,7 +69,6 @@ export function ProcessDialog({
           <DialogDescription className="text-xs">{config.subtitle}</DialogDescription>
         </DialogHeader>
 
-        {/* Progress bar */}
         <div className="space-y-1.5">
           <div className="flex justify-between text-[11px] text-muted-foreground">
             <span>
@@ -85,7 +85,6 @@ export function ProcessDialog({
           <Progress value={progress} className="h-1.5" />
         </div>
 
-        {/* Steps list */}
         <div className="space-y-1 py-1">
           {config.steps.map((step, idx) => {
             const isActive = step.status === 'running'
@@ -107,7 +106,6 @@ export function ProcessDialog({
                   isIdle && isPast && 'border-border bg-card opacity-40'
                 )}
               >
-                {/* Icon */}
                 <div
                   className={cn(
                     'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition-colors',
@@ -124,11 +122,10 @@ export function ProcessDialog({
                   ) : isError ? (
                     <IconX size={14} />
                   ) : (
-                    step.icon
+                    <ProcessIcon name={step.icon} size={14} />
                   )}
                 </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <p
                     className={cn(
@@ -154,7 +151,6 @@ export function ProcessDialog({
                   )}
                 </div>
 
-                {/* Step number */}
                 <span
                   className={cn(
                     'text-[10px] tabular-nums shrink-0 mt-1',
@@ -170,7 +166,6 @@ export function ProcessDialog({
           })}
         </div>
 
-        {/* Evaluasi result setelah latih */}
         {allDone && evaluasi && (
           <>
             <Separator />
@@ -216,7 +211,7 @@ export function ProcessDialog({
                 ))}
               </div>
               <p className="text-[10px] text-center text-muted-foreground">
-                {evaluasi.berhasil} santri berhasil diklasifikasi ulang
+                Santri berhasil diklasifikasi ulang
               </p>
             </div>
           </>

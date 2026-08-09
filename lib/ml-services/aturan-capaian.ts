@@ -57,10 +57,8 @@ export async function fetchFeatureImportance(): Promise<FeatureImportanceItem[]>
 export async function simpanAturan(formData: AturanCapaianFormData): Promise<AturanCapaian> {
   const supabase = getClient()
 
-  // Nonaktifkan aturan lama
   await supabase.from('aturan_capaian').update({ is_active: false }).eq('is_active', true)
 
-  // Simpan aturan baru — trigger di DB akan otomatis generate training_master
   const { data, error } = await supabase
     .from('aturan_capaian')
     .insert({
@@ -82,8 +80,8 @@ export async function resetAturanDefault(): Promise<AturanCapaian> {
   const { data: existingDefault, error } = await supabase
     .from('aturan_capaian')
     .select('*')
-    .eq('batas_durasi_jilid_0_4', 3)
-    .eq('batas_durasi_jilid_5_6', 4)
+    .eq('batas_durasi_jilid_0_4', 6)
+    .eq('batas_durasi_jilid_5_6', 8)
     .eq('batas_pengulangan_taskih', 3)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -110,7 +108,6 @@ export async function resetAturanDefault(): Promise<AturanCapaian> {
 export async function deleteAturan(id: string): Promise<void> {
   const supabase = getClient()
 
-  // Cek aturan
   const { data: aturan, error: checkError } = await supabase
     .from('aturan_capaian')
     .select('id, is_active')
@@ -121,12 +118,10 @@ export async function deleteAturan(id: string): Promise<void> {
     throw new Error('Model tidak ditemukan')
   }
 
-  // Jangan hapus model aktif
   if (aturan.is_active) {
     throw new Error('Model aktif tidak dapat dihapus')
   }
 
-  // Hapus data training terkait dulu
   const { error: trainingError } = await supabase
     .from('training_master')
     .delete()
@@ -136,7 +131,6 @@ export async function deleteAturan(id: string): Promise<void> {
     throw trainingError
   }
 
-  // Hapus aturan
   const { error } = await supabase.from('aturan_capaian').delete().eq('id', id)
 
   if (error) {
@@ -150,7 +144,6 @@ export async function deleteAturan(id: string): Promise<void> {
 export async function setAturanAktif(id: string): Promise<AturanCapaian> {
   const supabase = getClient()
 
-  // Ambil data aturan target
   const { data: aturan, error: checkError } = await supabase
     .from('aturan_capaian')
     .select('*')
@@ -161,7 +154,6 @@ export async function setAturanAktif(id: string): Promise<AturanCapaian> {
     throw new Error('Model tidak ditemukan')
   }
 
-  // Nonaktifkan semua model aktif
   const { error: disableError } = await supabase
     .from('aturan_capaian')
     .update({
@@ -174,7 +166,6 @@ export async function setAturanAktif(id: string): Promise<AturanCapaian> {
     throw disableError
   }
 
-  // Aktifkan model terpilih
   const { data, error } = await supabase
     .from('aturan_capaian')
     .update({
@@ -195,17 +186,14 @@ export async function setAturanAktif(id: string): Promise<AturanCapaian> {
 /**
  * Latih ulang Decision Tree.
  *
- * Sumber data: tabel training_master yang sudah digenerate otomatis
- * oleh trigger saat aturan disimpan. Skema training_master sekarang
- * menyimpan histori durasi jilid_0..jilid_6 sekaligus per row (1 row
- * = 1 santri simulasi), bukan snapshot 1 jilid per row, agar fitur
- * rata_rata_durasi/total_durasi/jumlah_jilid_diambil di sisi ML tidak
- * jadi duplikat trivial dari durasi jilid aktif saja.
+ * Sumber data: tabel training_master (skema baru, 1 row = 1 sampel
+ * jilid tunggal: jilid, durasi_bulan, pengulangan_taskih, label).
+ * Fitur model disederhanakan jadi hanya 3 variabel yang benar-benar
+ * dipakai rule (durasi > batas ATAU taskih >= batas) — lihat model.py.
  */
 export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult> {
   const supabase = getClient()
 
-  // Ambil aturan
   const { data: aturan, error: aErr } = await supabase
     .from('aturan_capaian')
     .select('*')
@@ -214,10 +202,6 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
 
   if (aErr) throw new Error('Aturan tidak ditemukan')
 
-  // Guard: peringatkan kalau aturan yang dilatih bukan aturan yang
-  // sedang aktif. Tidak diblok total (mungkin sengaja melatih riwayat
-  // lama), tapi caller harus sadar — ini sumber bug "evaluasi tidak
-  // sesuai aturan aktif" kalau dipanggil tanpa sengaja pada id lama.
   if (!aturan.is_active) {
     console.warn(
       `[latihUlangModel] Melatih aturan_id=${aturanId} yang TIDAK is_active. ` +
@@ -226,13 +210,9 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
     )
   }
 
-  // Ambil data training dari tabel master (skema baru: histori per jilid)
   const { data: trainingData, error: tErr } = await supabase
     .from('training_master')
-    .select(
-      'jilid_saat_ini, durasi_jilid_0, durasi_jilid_1, durasi_jilid_2, durasi_jilid_3, ' +
-        'durasi_jilid_4, durasi_jilid_5, durasi_jilid_6, total_pengulangan_taskih, label'
-    )
+    .select('jilid, durasi_bulan, pengulangan_taskih, label')
     .eq('aturan_id', aturanId)
 
   if (tErr) throw tErr
@@ -241,32 +221,17 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
     throw new Error('Data training belum tersedia. Coba simpan ulang aturan capaian.')
   }
 
-  // Bangun data latih untuk ML Service — sekarang langsung 1:1 dengan
-  // kolom tabel, tidak perlu trik "row.jilid === i ? x : null" lagi
-  // karena histori semua jilid sudah tersimpan per row.
   const dataLatih = (
     trainingData as unknown as Array<{
-      jilid_saat_ini: number
-      durasi_jilid_0: number
-      durasi_jilid_1: number
-      durasi_jilid_2: number
-      durasi_jilid_3: number
-      durasi_jilid_4: number
-      durasi_jilid_5: number
-      durasi_jilid_6: number
-      total_pengulangan_taskih: number
+      jilid: number
+      durasi_bulan: number
+      pengulangan_taskih: number
       label: 'BBK' | 'TBBK'
     }>
   ).map((row) => ({
-    jilid_saat_ini: row.jilid_saat_ini,
-    total_pengulangan_taskih: row.total_pengulangan_taskih,
-    durasi_jilid_0: row.durasi_jilid_0,
-    durasi_jilid_1: row.durasi_jilid_1,
-    durasi_jilid_2: row.durasi_jilid_2,
-    durasi_jilid_3: row.durasi_jilid_3,
-    durasi_jilid_4: row.durasi_jilid_4,
-    durasi_jilid_5: row.durasi_jilid_5,
-    durasi_jilid_6: row.durasi_jilid_6,
+    jilid: row.jilid,
+    durasi_bulan: row.durasi_bulan,
+    pengulangan_taskih: row.pengulangan_taskih,
     label: row.label,
   }))
 
@@ -279,7 +244,6 @@ export async function latihUlangModel(aturanId: string): Promise<EvaluasiResult>
     data_latih: dataLatih,
   })
 
-  // Simpan hasil evaluasi ke Supabase
   await supabase
     .from('aturan_capaian')
     .update({
