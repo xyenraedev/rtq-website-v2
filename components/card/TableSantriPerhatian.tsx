@@ -72,7 +72,11 @@ export function TableSantriPerhatian() {
               <IconAlertTriangle size={16} className="text-red-500 shrink-0" />
               Santri Butuh Perhatian
             </CardTitle>
-            <CardDescription>5 santri BBK terbaru — perlu tindak lanjut segera</CardDescription>
+            <CardDescription>
+              {data.length > 0
+                ? `${data.length} santri BBK terbaru — perlu tindak lanjut segera`
+                : 'Tidak ada santri yang perlu tindak lanjut saat ini'}
+            </CardDescription>{' '}
           </div>
 
           <Button
